@@ -49,6 +49,7 @@ function makePreviewCard(x, y) {
 const STEP_COLORS = {
   burst: '#7c3aed', ring: '#1d4ed8', shake: '#dc2626',
   text:  '#d97706', rise: '#16a34a', flash: '#0891b2',
+  fire:  '#e85d04',
 };
 
 const STEP_SCHEMAS = {
@@ -95,6 +96,13 @@ const STEP_SCHEMAS = {
     { key: 'alpha',   label: 'Opacity',       type: 'range',  min: 0.05, max: 1, step: 0.05, default: 0.6 },
     { key: 'duration',label: 'Duration (ms)', type: 'range',  min: 50,   max: 1500, step: 25, default: 300 },
     { key: 'delay',   label: 'Start Delay (ms)',type:'range', min: 0,    max: 3000, step: 50, default: 0 },
+  ],
+  fire: [
+    { key: 'count',    label: 'Particle Count', type: 'range', min: 5,  max: 120, step: 1,   default: 40 },
+    { key: 'height',   label: 'Rise Height',    type: 'range', min: 20, max: 300, step: 5,   default: 110 },
+    { key: 'spread',   label: 'Horizontal Spread', type: 'range', min: 0, max: 100, step: 2, default: 28 },
+    { key: 'duration', label: 'Duration (ms)',  type: 'range', min: 200, max: 4000, step: 50, default: 900 },
+    { key: 'delay',    label: 'Start Delay (ms)', type: 'range', min: 0, max: 3000, step: 50, default: 0 },
   ],
 };
 

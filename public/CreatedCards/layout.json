@@ -21,7 +21,7 @@
         "x": 216,
         "y": 54
       },
-      "factionIconSize": 103
+      "factionIconSize": 91
     },
     "field": {
       "attack": {
@@ -41,10 +41,10 @@
         "y": 21
       },
       "faction": {
-        "x": 131,
-        "y": 80
+        "x": 132,
+        "y": 79
       },
-      "factionIconSize": 103
+      "factionIconSize": 91
     }
   },
   "fieldCircle": {
@@ -53,15 +53,51 @@
     "r": 92
   },
   "handArtBox": {
-    "x": 17,
-    "y": 43,
-    "w": 234,
-    "h": 261
+    "x": 22,
+    "y": 41,
+    "w": 224,
+    "h": 262
   },
   "handLayoutConfig": {
     "angle": 6,
     "arc": 6,
     "hover": 30,
     "spacing": 145
-  }
+  },
+  "animCardPlay": [
+    {
+      "id": "summon_vfx",
+      "slot": 0
+    },
+    {
+      "id": "battlecry_burst",
+      "slot": 1
+    },
+    {
+      "id": "on_play",
+      "slot": 2
+    }
+  ],
+  "animCombat": [
+    {
+      "id": "lunge",
+      "slot": 0
+    },
+    {
+      "id": "clash_vfx",
+      "slot": 1
+    },
+    {
+      "id": "damage",
+      "slot": 1
+    },
+    {
+      "id": "snap_back",
+      "slot": 2
+    },
+    {
+      "id": "death_vfx",
+      "slot": 3
+    }
+  ]
 }

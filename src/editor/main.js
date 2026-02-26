@@ -184,6 +184,11 @@ let currentCard = freshCard();
 let collection  = loadCollection();
 let editingId   = null;   // id of card being edited (null = new)
 
+// ── Glow preview state ────────────────────────────────────────────────────────
+let glowPreviewMode = 'none'; // 'none' | 'highlight' | 'buff' | 'damage'
+let glowInset = 0;            // ring offset in editor pixels (256×384 space); saved to localStorage
+let glowWidth = 1.0;          // ring stroke-width multiplier; saved to localStorage
+
 // ── Load frames ───────────────────────────────────────────────────────────────
 cardFrame = new Image();
 cardFrame.onload  = () => redraw();
@@ -563,8 +568,24 @@ function redraw() {
 
   // 2. Card frame on top – EmptyCard.png (hand) or OnFieldFrame.png (field)
   const activeFrame = viewMode === 'field' ? cardFieldFrame : cardFrame;
+
+  // For field mode: glow goes BEHIND the frame (between art and frame layer).
+  // For hand mode: glow goes ON TOP of the frame.
+  const _glowActive = glowPreviewMode !== 'none';
+  let gc; try { gc = JSON.parse(localStorage.getItem('card-glow-colors') || '{}'); } catch { gc = {}; }
+  const _glowColorMap = { highlight: gc.highlight || '#ffd700', buff: gc.buff || '#22ee66', damage: gc.damage || '#ff3333' };
+
+  if (_glowActive && viewMode === 'field') {
+    drawGlowPreview(_glowColorMap[glowPreviewMode], glowInset, glowWidth);
+  }
+
   if (activeFrame) {
     ctx.drawImage(activeFrame, 0, 0, W, H);
+  }
+
+  // Hand-mode glow sits on top of the frame
+  if (_glowActive && viewMode !== 'field') {
+    drawGlowPreview(_glowColorMap[glowPreviewMode], glowInset, glowWidth);
   }
 
   // 2.5 Field circle window drag handles (field mode only)
@@ -774,6 +795,61 @@ function addTextShadow(ctx, blur = 2) {
   ctx.shadowBlur    = blur;
   ctx.shadowOffsetX = 1;
   ctx.shadowOffsetY = 1;
+}
+
+// Draw a glow around the card frame in the 2D preview canvas.
+// inset > 0 → rings move inward; inset < 0 → rings extend outward.
+function drawGlowPreview(hexColor, inset, widthScale = 1) {
+  if (viewMode === 'field') {
+    // Circle glow centred on the field circle window
+    const { cx, cy, r } = fieldCircle;
+    const effR = Math.max(1, r - inset);
+    const w    = widthScale;
+    ctx.save();
+    ctx.strokeStyle = hexColor;
+    ctx.shadowColor = hexColor;
+    ctx.shadowBlur  = 18 * w; ctx.lineWidth = 4 * w; ctx.globalAlpha = 1.0;
+    ctx.beginPath(); ctx.arc(cx, cy, effR, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowBlur  = 10 * w; ctx.lineWidth = 8 * w; ctx.globalAlpha = 0.55;
+    ctx.beginPath(); ctx.arc(cx, cy, Math.max(1, effR - 2), 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowBlur  = 5  * w; ctx.lineWidth = 14 * w; ctx.globalAlpha = 0.22;
+    ctx.beginPath(); ctx.arc(cx, cy, Math.max(1, effR - 6), 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  const i = inset;
+  const cornerR = Math.max(3, 16 - i * 0.4);
+  const w = widthScale;
+
+  ctx.save();
+  ctx.strokeStyle = hexColor;
+
+  // Ring 1 — crisp outer border
+  ctx.shadowColor = hexColor;
+  ctx.shadowBlur  = 18 * w;
+  ctx.lineWidth   = 4 * w;
+  ctx.globalAlpha = 1.0;
+  roundRectPath(ctx, i, i, W - i * 2, H - i * 2, cornerR);
+  ctx.stroke();
+
+  // Ring 2 — mid halo (2 px inside ring 1)
+  const i2 = i + 2;
+  ctx.shadowBlur  = 10 * w;
+  ctx.lineWidth   = 8 * w;
+  ctx.globalAlpha = 0.55;
+  roundRectPath(ctx, i2, i2, W - i2 * 2, H - i2 * 2, Math.max(2, cornerR - 1));
+  ctx.stroke();
+
+  // Ring 3 — deep inner fill
+  const i3 = i + 6;
+  ctx.shadowBlur  = 5 * w;
+  ctx.lineWidth   = 14 * w;
+  ctx.globalAlpha = 0.22;
+  roundRectPath(ctx, i3, i3, W - i3 * 2, H - i3 * 2, Math.max(1, cornerR - 2));
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 function roundRectPath(ctx, x, y, w, h, r) {
@@ -1612,5 +1688,79 @@ _saveLayoutToFile();
 
   syncSliders();
   draw();
+})();
+
+// ── Glow colour pickers + preview + inset ────────────────────────────────────
+(function initGlowColors() {
+  const KEY       = 'card-glow-colors';
+  const INSET_KEY = 'card-glow-inset';
+  const DEFAULTS  = { highlight: '#ffd700', buff: '#22ee66', damage: '#ff3333' };
+
+  // Load saved colours
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch {}
+  const colors = { ...DEFAULTS, ...saved };
+
+  const pHighlight = document.getElementById('glow-highlight');
+  const pBuff      = document.getElementById('glow-buff');
+  const pDamage    = document.getElementById('glow-damage');
+  if (!pHighlight) return;
+
+  pHighlight.value = colors.highlight;
+  pBuff.value      = colors.buff;
+  pDamage.value    = colors.damage;
+
+  function saveColors() {
+    const obj = { highlight: pHighlight.value, buff: pBuff.value, damage: pDamage.value };
+    localStorage.setItem(KEY, JSON.stringify(obj));
+    redraw();
+  }
+  pHighlight.addEventListener('input', saveColors);
+  pBuff.addEventListener('input',      saveColors);
+  pDamage.addEventListener('input',    saveColors);
+
+  // Load saved inset
+  const savedInset = parseFloat(localStorage.getItem(INSET_KEY) || '0');
+  glowInset = isNaN(savedInset) ? 0 : savedInset;
+  const slInset    = document.getElementById('glow-inset');
+  const lblInset   = document.getElementById('glow-inset-val');
+  if (slInset) {
+    slInset.value = glowInset;
+    lblInset.textContent = glowInset + ' px';
+    slInset.addEventListener('input', () => {
+      glowInset = parseFloat(slInset.value);
+      lblInset.textContent = glowInset + ' px';
+      localStorage.setItem(INSET_KEY, String(glowInset));
+      redraw();
+    });
+  }
+
+  // Load saved width
+  const WIDTH_KEY   = 'card-glow-width';
+  const savedWidth  = parseFloat(localStorage.getItem(WIDTH_KEY) || '1');
+  glowWidth = isNaN(savedWidth) ? 1.0 : savedWidth;
+  const slWidth     = document.getElementById('glow-width');
+  const lblWidth    = document.getElementById('glow-width-val');
+  if (slWidth) {
+    slWidth.value = glowWidth;
+    lblWidth.textContent = glowWidth.toFixed(1) + '×';
+    slWidth.addEventListener('input', () => {
+      glowWidth = parseFloat(slWidth.value);
+      lblWidth.textContent = glowWidth.toFixed(1) + '×';
+      localStorage.setItem(WIDTH_KEY, String(glowWidth));
+      redraw();
+    });
+  }
+
+  // Preview mode toggle buttons
+  const prevBtns = document.querySelectorAll('.glow-prev-btn');
+  prevBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      prevBtns.forEach(b => b.style.opacity = '0.55');
+      btn.style.opacity = '1';
+      glowPreviewMode = btn.dataset.mode;
+      redraw();
+    });
+  });
 })();
 

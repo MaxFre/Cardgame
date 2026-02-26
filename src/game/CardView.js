@@ -165,8 +165,11 @@ export class CardView extends PIXI.Container {
     // Faction icon — replaces the old text + pill
     const FACTION_ICONS = { Folk: iconFolkSrc, Magical: iconMagicalSrc, Wild: iconWildSrc };
     const iconSrc = FACTION_ICONS[this.card.faction] ?? iconFolkSrc;
-    const iconTex = PIXI.Texture.from(iconSrc);
-    iconTex.baseTexture.scaleMode = PIXI.SCALE_MODES.LINEAR;
+    const iconBase = PIXI.BaseTexture.from(iconSrc, {
+      scaleMode: PIXI.SCALE_MODES.LINEAR,
+      mipmap:    PIXI.MIPMAP_MODES.ON,
+    });
+    const iconTex = new PIXI.Texture(iconBase);
     this._factionIcon = new PIXI.Sprite(iconTex);
     this._factionIcon.anchor.set(0.5);
     this._factionIcon.roundPixels = false;
@@ -213,6 +216,7 @@ export class CardView extends PIXI.Container {
     // Highlight overlay (invisible by default)
     this._glow = new PIXI.Graphics();
     this._glow.zIndex = 3;
+    this._glow.filters = [new PIXI.BlurFilter(1.8, 4)];
     this._setGlow(false);
     this.addChild(this._glow);
 
@@ -261,18 +265,63 @@ export class CardView extends PIXI.Container {
     g.endFill();
   }
 
+  // Load per-event glow colours + ring inset + width from the editor (saved in localStorage)
+  static _loadGlowColors() {
+    try {
+      const c = JSON.parse(localStorage.getItem('card-glow-colors') || 'null') ?? {};
+      const hex = s => parseInt((s || '').replace('#', ''), 16);
+      // Inset stored at editor scale (256×384); PIXI works at half that (128×192)
+      const inset = parseFloat(localStorage.getItem('card-glow-inset') || '0') / 2 || 0;
+      const width = parseFloat(localStorage.getItem('card-glow-width') || '1') || 1;
+      return {
+        highlight: hex(c.highlight) || 0xffd700,
+        buff:      hex(c.buff)      || 0x22ee66,
+        damage:    hex(c.damage)    || 0xff3333,
+        inset, width,
+      };
+    } catch { return { highlight: 0xffd700, buff: 0x22ee66, damage: 0xff3333, inset: 0, width: 1 }; }
+  }
+
+  // Shared glow ring painter — adapts to hand (rounded rect) vs field (circle)
+  _drawGlowRings(color) {
+    const g = this._glow;
+    const { inset: k, width: w } = CardView._loadGlowColors();
+    const opt = (width, alpha) => ({ width: width * w, color, alpha, join: PIXI.LINE_JOIN.ROUND, cap: PIXI.LINE_CAP.ROUND });
+
+    if (this._isField) {
+      // Circle glow matching the OnFieldFrame circular art window
+      const { cx, cy, r } = FIELD_CIRCLE;
+      const effR = Math.max(1, r - k);
+      g.lineStyle(opt(2, 1.0));
+      g.drawCircle(cx, cy, effR);
+      g.lineStyle(opt(4, 0.55));
+      g.drawCircle(cx, cy, Math.max(1, effR - 1));
+      g.lineStyle(opt(7, 0.22));
+      g.drawCircle(cx, cy, Math.max(1, effR - 3));
+    } else {
+      // Rounded rect glow for hand cards
+      const bx = -CARD_W / 2 + k, by = -CARD_H / 2 + k;
+      const bw = CARD_W - k * 2,  bh = CARD_H - k * 2;
+      const r  = Math.max(2, 8 - k * 0.4);
+      g.lineStyle(opt(2, 1.0));
+      g.drawRoundedRect(bx, by, bw, bh, r);
+      g.lineStyle(opt(4, 0.55));
+      g.drawRoundedRect(bx + 1, by + 1, bw - 2, bh - 2, Math.max(1, r - 1));
+      g.lineStyle(opt(7, 0.22));
+      g.drawRoundedRect(bx + 3, by + 3, bw - 6, bh - 6, Math.max(1, r - 2));
+    }
+    g.lineStyle(0);
+  }
+
   _setGlow(on) {
     const g = this._glow;
     g.clear();
-    if (on) {
-      g.lineStyle(3, 0xf1c40f, 1);
-      g.drawRoundedRect(-CARD_W / 2, -CARD_H / 2, CARD_W, CARD_H, 8);
-    }
+    if (on) this._drawGlowRings(CardView._loadGlowColors().highlight);
   }
 
   setHighlight(on) {
     this._setGlow(on);
-    this._sprite.tint = on ? 0xddddff : 0xffffff;
+    this._sprite.tint = 0xffffff;
   }
 
   /**
@@ -290,12 +339,12 @@ export class CardView extends PIXI.Container {
     if (!mult || mult === 0) return;
 
     const isGood  = mult > 0;
-    const color   = isGood ? 0x22ee66 : 0xff3333;
+    const gc      = CardView._loadGlowColors();
+    const color   = isGood ? gc.buff : gc.damage;
     const label   = badgeLabel ?? (isGood ? '+1' : '-1');
 
-    // Coloured border
-    g.lineStyle(3, color, 1);
-    g.drawRoundedRect(-CARD_W / 2, -CARD_H / 2, CARD_W, CARD_H, 8);
+    // Layered coloured border glow (tight, inward)
+    this._drawGlowRings(color);
 
     // Badge pill
     const badge = new PIXI.Container();
@@ -359,6 +408,9 @@ export class CardView extends PIXI.Container {
   useFieldFrame() {
     this._isField = true;   // flag read by the art loaded callback
     this._sprite.texture = fieldFrameTexture;
+    // Glow renders behind the frame in field mode (between art layer and frame layer)
+    this._glow.zIndex = 0.5;
+    this.sortChildren();
     const applySize = () => {
       this._sprite.width  = CARD_W;
       this._sprite.height = CARD_H;
@@ -431,6 +483,9 @@ export class CardView extends PIXI.Container {
   useFrontFace() {
     this._sprite.scale.set(1, 1);
     this._sprite.texture = cardTexture;
+    // Glow returns to top layer in hand mode
+    this._glow.zIndex = 3;
+    this.sortChildren();
     const applySize = () => {
       this._sprite.width  = CARD_W;
       this._sprite.height = CARD_H;

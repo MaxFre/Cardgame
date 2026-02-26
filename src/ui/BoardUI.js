@@ -15,6 +15,7 @@ import { MoraleDisplay }   from './MoraleDisplay.js';
 import { RationsDisplay }  from './RationsDisplay.js';
 import * as PIXI           from 'pixi.js';
 import { SoundManager }    from '../game/SoundManager.js';
+import { AnimationSequencer } from '../game/AnimationSequencer.js';
 
 export function init(app) {
   const { stage, screen } = app;
@@ -114,7 +115,6 @@ export function init(app) {
     // Spell cast flash — fires a burst ring at the card's current world position
     // (card is still alive and fading during the expand tween in DragDrop)
     await vfx.battlecryBurst(cv).catch(() => {});
-    await vfx.screenShake(6, 200).catch(() => {});
     const eff = cv.card.onPlayEffect;
     if (!eff?.id) return;
     const meta = EFFECTS_BY_ID[eff.id];
@@ -144,6 +144,34 @@ export function init(app) {
     }
   });
 
+  // Returns true when a battlecry effect has at least one valid target / something to do.
+  function _canUseBattlecry(eff, cardView, sourceField, targetField) {
+    if (!eff?.id) return false;
+    const meta = EFFECTS_BY_ID[eff.id];
+    if (!meta) return false;
+    // Target-requiring effects need a non-empty pool
+    if (meta.requiresTarget) {
+      const pool = (meta.targetAny
+        ? [...sourceField._placed.map(p => p.cardView), ...targetField._placed.map(p => p.cardView)]
+        : (meta.targetFriendly ? sourceField : targetField)._placed.map(p => p.cardView)
+      ).filter(cv => cv !== cardView);
+      return pool.length > 0;
+    }
+    // Damage effects need living enemies
+    if (eff.id === 'deal_damage_random_enemy' || eff.id === 'deal_damage_all_enemies') {
+      return targetField._placed.some(p => !p.cardView.destroyed && p.cardView.card.health > 0);
+    }
+    // Heal effect needs a damaged friendly
+    if (eff.id === 'heal_random_friendly') {
+      return sourceField._placed.some(p =>
+        p.cardView !== cardView && !p.cardView.destroyed &&
+        p.cardView.card.health > 0 && p.cardView.card.health < p.cardView._maxHealth
+      );
+    }
+    // Everything else (morale, draw, rations…) always fires
+    return true;
+  }
+
   // Each time a card is removed from a field, the owner loses 1 morale
   playerField.onCardRemoved   = () => playerMorale.takeDamage();
   opponentField.onCardRemoved = () => opponentMorale.takeDamage();
@@ -151,75 +179,103 @@ export function init(app) {
   playerField.onCardKilled  = cv => { const de = cv.card?.deathEffect; if (de?.id) applyDeathEffect(de.id, de.value ?? 1, playerField,   opponentField, vfx); };
   opponentField.onCardKilled = cv => { const de = cv.card?.deathEffect; if (de?.id) applyDeathEffect(de.id, de.value ?? 1, opponentField, playerField,   vfx); };
   // Arm each player card as it lands on the field and swap to field frame
-  playerField.onCardPlaced = async cardView => {
+  // onCardLanded: fires at impact, runs in parallel with spring animation — summon VFX fires here
+  playerField.onCardLanded = cardView => {
     cardView.useFieldFrame();
     combat.armCard(cardView, true);
     const faction = cardView.card?.faction ?? null;
-    const summonPreset = cardView.card?.summonVfxPreset;
-    if (summonPreset) {
-      await vfx.playPreset(summonPreset, cardView).catch(() => {});
-    } else if (vfx.hasFactionPreset(faction)) {
-      await vfx.playFactionPreset(faction, cardView).catch(() => {});
-    } else {
-      await vfx.summonFlash(cardView, faction).catch(() => {});
-    }
-    const eff = cardView.card.onPlayEffect;
-    if (eff?.id) {
-      await vfx.battlecryBurst(cardView, faction).catch(() => {});
-      const meta = EFFECTS_BY_ID[eff.id];
-      if (meta?.requiresTarget) {
-        const pool = (meta.targetAny
-          ? [
-              ...playerField._placed.map(p => p.cardView),
-              ...opponentField._placed.map(p => p.cardView),
-            ]
-          : (meta.targetFriendly ? playerField : opponentField)._placed.map(p => p.cardView)
-        ).filter(cv => cv !== cardView);  // can't target yourself
-        if (pool.length > 0) {
-          const isPositive = meta.isPositive ?? !!meta.targetFriendly;
-          const label = meta.targetLabel ?? (isPositive ? `+${eff.value ?? 1}` : `-${eff.value ?? 1}`);
-          const chosen = await pickTarget(pool, isPositive, label);
-          if (chosen) {
-            await applyOnPlay(eff.id, eff.value ?? 1, playerField, opponentField, combat, playerMorale, opponentMorale, playerRations, chosen, vfx, cardView, _playerDrawCb);
+    const preset  = cardView.card?.summonVfxPreset;
+    if (preset)                            vfx.playPreset(preset, cardView).catch(() => {});
+    else if (vfx.hasFactionPreset(faction)) vfx.playFactionPreset(faction, cardView).catch(() => {});
+    else                                    vfx.summonFlash(cardView, faction).catch(() => {});
+  };
+  // onCardPlaced: fires after spring finishes — battlecry routed through the timeline sequencer
+  playerField.onCardPlaced = async cardView => {
+    const faction = cardView.card?.faction ?? null;
+    const eff     = cardView.card.onPlayEffect;
+    await AnimationSequencer.runCardPlay({
+      summon_vfx: async () => { /* fired in onCardLanded */ },
+      battlecry_burst: async () => {
+        if (_canUseBattlecry(eff, cardView, playerField, opponentField)) {
+          const meta = EFFECTS_BY_ID[eff.id];
+          if (meta?.requiresTarget) {
+            // Fire and don't await — targets appear while burst is still playing
+            vfx.battlecryBurst(cardView, faction).catch(() => {});
+            await new Promise(r => setTimeout(r, 180));
+          } else {
+            await vfx.battlecryBurst(cardView, faction).catch(() => {});
           }
         }
-      } else {
-        await applyOnPlay(eff.id, eff.value ?? 1, playerField, opponentField, combat, playerMorale, opponentMorale, playerRations, null, vfx, cardView, _playerDrawCb);
-      }
-    }
+      },
+      on_play: async () => {
+        if (!eff?.id) return;
+        const meta = EFFECTS_BY_ID[eff.id];
+        if (meta?.requiresTarget) {
+          const pool = (meta.targetAny
+            ? [
+                ...playerField._placed.map(p => p.cardView),
+                ...opponentField._placed.map(p => p.cardView),
+              ]
+            : (meta.targetFriendly ? playerField : opponentField)._placed.map(p => p.cardView)
+          ).filter(cv => cv !== cardView);
+          if (pool.length > 0) {
+            const isPositive = meta.isPositive ?? !!meta.targetFriendly;
+            const label = meta.targetLabel ?? (isPositive ? `+${eff.value ?? 1}` : `-${eff.value ?? 1}`);
+            const chosen = await pickTarget(pool, isPositive, label);
+            if (chosen) {
+              await applyOnPlay(eff.id, eff.value ?? 1, playerField, opponentField, combat, playerMorale, opponentMorale, playerRations, chosen, vfx, cardView, _playerDrawCb);
+            }
+          }
+        } else {
+          await applyOnPlay(eff.id, eff.value ?? 1, playerField, opponentField, combat, playerMorale, opponentMorale, playerRations, null, vfx, cardView, _playerDrawCb);
+        }
+      },
+    });
   };
 
-  opponentField.onCardPlaced = async cardView => {
+  opponentField.onCardLanded = cardView => {
     combat.armOpponentCard(cardView, true);
     const faction = cardView.card?.faction ?? null;
-    const summonPreset = cardView.card?.summonVfxPreset;
-    if (summonPreset) {
-      await vfx.playPreset(summonPreset, cardView).catch(() => {});
-    } else if (vfx.hasFactionPreset(faction)) {
-      await vfx.playFactionPreset(faction, cardView).catch(() => {});
-    } else {
-      await vfx.summonFlash(cardView, faction).catch(() => {});
-    }
-    const eff = cardView.card.onPlayEffect;
-    if (eff?.id) {
-      await vfx.battlecryBurst(cardView, faction).catch(() => {});
-      const meta = EFFECTS_BY_ID[eff.id];
-      let chosenTarget = null;
-      if (meta?.requiresTarget) {
-        // Opponent picks a random valid target (excluding itself)
-        const pool = (meta.targetAny
-          ? [
-              ...opponentField._placed.map(p => p.cardView),
-              ...playerField._placed.map(p => p.cardView),
-            ]
-          : (meta.targetFriendly ? opponentField : playerField)._placed.map(p => p.cardView)
-        ).filter(cv => cv !== cardView);  // can't target yourself
-        if (pool.length > 0) chosenTarget = pool[Math.floor(Math.random() * pool.length)];
-      }
-      if (!meta?.requiresTarget || chosenTarget) {
-        await applyOnPlay(eff.id, eff.value ?? 1, opponentField, playerField, combat, opponentMorale, playerMorale, opponentRations, chosenTarget, vfx, cardView, { drawCard: () => { drawCardToOpponentHand(opponentDeck); opponentDeckView.setCount(opponentDeck.length); } });
-      }
-    }
+    const preset  = cardView.card?.summonVfxPreset;
+    if (preset)                            vfx.playPreset(preset, cardView).catch(() => {});
+    else if (vfx.hasFactionPreset(faction)) vfx.playFactionPreset(faction, cardView).catch(() => {});
+    else                                    vfx.summonFlash(cardView, faction).catch(() => {});
+  };
+  opponentField.onCardPlaced = async cardView => {
+    const faction = cardView.card?.faction ?? null;
+    const eff     = cardView.card.onPlayEffect;
+    await AnimationSequencer.runCardPlay({
+      summon_vfx: async () => { /* fired in onCardLanded */ },
+      battlecry_burst: async () => {
+        if (_canUseBattlecry(eff, cardView, opponentField, playerField)) {
+          const meta = EFFECTS_BY_ID[eff.id];
+          if (meta?.requiresTarget) {
+            vfx.battlecryBurst(cardView, faction).catch(() => {});
+            await new Promise(r => setTimeout(r, 180));
+          } else {
+            await vfx.battlecryBurst(cardView, faction).catch(() => {});
+          }
+        }
+      },
+      on_play: async () => {
+        if (!eff?.id) return;
+        const meta = EFFECTS_BY_ID[eff.id];
+        let chosenTarget = null;
+        if (meta?.requiresTarget) {
+          const pool = (meta.targetAny
+            ? [
+                ...opponentField._placed.map(p => p.cardView),
+                ...playerField._placed.map(p => p.cardView),
+              ]
+            : (meta.targetFriendly ? opponentField : playerField)._placed.map(p => p.cardView)
+          ).filter(cv => cv !== cardView);
+          if (pool.length > 0) chosenTarget = pool[Math.floor(Math.random() * pool.length)];
+        }
+        if (!meta?.requiresTarget || chosenTarget) {
+          await applyOnPlay(eff.id, eff.value ?? 1, opponentField, playerField, combat, opponentMorale, playerMorale, opponentRations, chosenTarget, vfx, cardView, { drawCard: () => { drawCardToOpponentHand(opponentDeck); opponentDeckView.setCount(opponentDeck.length); } });
+        }
+      },
+    });
   };
 
   // ── Draw initial hand for player ─────────────────────────────────────────
@@ -322,7 +378,19 @@ export function init(app) {
   btn.addChild(btnLabel);
   btn.on('pointerover',  () => drawBtn(true));
   btn.on('pointerout',   () => drawBtn(false));
-  btn.on('pointerdown',  () => { SoundManager.play('endTurn'); combat.endTurn(); });
+  btn.on('pointerdown',  () => {
+    if (btn._endTurnPending) return;
+    btn._endTurnPending = true;
+    btn.interactive = false;
+    btn.alpha = 0.5;
+    SoundManager.play('endTurn');
+    setTimeout(() => {
+      btn._endTurnPending = false;
+      btn.interactive = true;
+      btn.alpha = 1;
+      combat.endTurn();
+    }, 1000);
+  });
 
   // ── Restart button ────────────────────────────────────────────────────────
   const restartBtn = new PIXI.Graphics();

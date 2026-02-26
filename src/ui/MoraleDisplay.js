@@ -7,7 +7,8 @@ export class MoraleDisplay extends PIXI.Container {
     super();
     this._morale   = STARTING_MORALE;
     this._isPlayer = isPlayer;
-    this.onDepleted = null;  // callback() fired when morale hits 0
+    this.onDepleted   = null;  // callback() fired when morale hits 0
+    this.onTakeDamage = null;  // callback() fired every time damage is taken
     this._build();
   }
 
@@ -74,6 +75,7 @@ export class MoraleDisplay extends PIXI.Container {
     this._icon.style.fill = this._morale <= 10 ? 0xff4444 : 0xe0e0f0;
 
     this._flashAndBounce(true);
+    this.onTakeDamage?.();
 
     if (this._morale === 0) this.onDepleted?.();
   }

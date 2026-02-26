@@ -142,6 +142,7 @@ export default defineConfig({
         handEditor:  resolve(__dirname, 'hand-editor.html'),
         vfxEditor:   resolve(__dirname, 'vfx-editor.html'),
         soundEditor: resolve(__dirname, 'sound-editor.html'),
+        animEditor:  resolve(__dirname, 'animation-editor.html'),
       },
     },
   },

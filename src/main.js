@@ -24,6 +24,8 @@ async function syncLayoutFromFile() {
     if (data.handSlots)          localStorage.setItem('hand-slot-positions',            JSON.stringify(data.handSlots));
     if (data.opponentHandSlots)  localStorage.setItem('hand-slot-positions-opponent',   JSON.stringify(data.opponentHandSlots));
     if (data.handLayoutConfig)   localStorage.setItem('hand-layout-config',             JSON.stringify(data.handLayoutConfig));
+    if (data.animCardPlay)        localStorage.setItem('anim-sequence-cardplay',          JSON.stringify(data.animCardPlay));
+    if (data.animCombat)          localStorage.setItem('anim-sequence-combat',            JSON.stringify(data.animCombat));
   } catch { /* file missing — localStorage fallback is used below */ }
 }
 
@@ -188,6 +190,13 @@ soundEditorBtn.addEventListener('mouseover', () => { soundEditorBtn.style.backgr
 soundEditorBtn.addEventListener('mouseout',  () => { soundEditorBtn.style.background = 'rgba(20,20,40,0.82)'; });
 soundEditorBtn.addEventListener('click', () => { window.location.href = '/sound-editor.html'; });
 
+const animEditorBtn = document.createElement('button');
+animEditorBtn.textContent = '⏱ Timeline';
+Object.assign(animEditorBtn.style, btnStyle);
+animEditorBtn.addEventListener('mouseover', () => { animEditorBtn.style.background = 'rgba(10,40,60,0.92)'; });
+animEditorBtn.addEventListener('mouseout',  () => { animEditorBtn.style.background = 'rgba(20,20,40,0.82)'; });
+animEditorBtn.addEventListener('click', () => { window.location.href = '/animation-editor.html'; });
+
 const muteBtn = document.createElement('button');
 SoundManager.mute(true);
 muteBtn.textContent = '🔇';
@@ -216,6 +225,7 @@ switchBtn.style.position = 'static';
 btnRow.appendChild(editorBtn);
 btnRow.appendChild(vfxEditorBtn);
 btnRow.appendChild(soundEditorBtn);
+btnRow.appendChild(animEditorBtn);
 btnRow.appendChild(muteBtn);
 btnRow.appendChild(switchBtn);
 document.body.appendChild(btnRow);

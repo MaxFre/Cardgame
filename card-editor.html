@@ -439,6 +439,65 @@
           <button id="btn-view-hand"  class="btn btn-outline active" style="flex:1; padding:7px; font-size:.8rem;">🃏 Hand</button>
           <button id="btn-view-field" class="btn btn-outline"        style="flex:1; padding:7px; font-size:.8rem;">⚔️ Field</button>
         </div>
+        <!-- Glow colour pickers + preview -->
+        <div style="width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px; display:flex; flex-direction:column; gap:10px;">
+          <p style="font-size:.73rem; text-transform:uppercase; letter-spacing:.1em; color:var(--muted);">🌟 Glow</p>
+
+          <!-- Preview toggle -->
+          <div style="display:flex; gap:5px;">
+            <button id="glow-prev-none"      class="glow-prev-btn active" data-mode="none"
+              style="flex:1; padding:4px 0; font-size:.72rem; border-radius:5px; border:1px solid var(--border); background:var(--surface); color:var(--muted); cursor:pointer;">Off</button>
+            <button id="glow-prev-highlight" class="glow-prev-btn" data-mode="highlight"
+              style="flex:1; padding:4px 0; font-size:.72rem; border-radius:5px; border:1px solid #ffd700; background:rgba(255,215,0,.08); color:#ffd700; cursor:pointer;">🟡</button>
+            <button id="glow-prev-buff"      class="glow-prev-btn" data-mode="buff"
+              style="flex:1; padding:4px 0; font-size:.72rem; border-radius:5px; border:1px solid #22ee66; background:rgba(34,238,102,.08); color:#22ee66; cursor:pointer;">🟢</button>
+            <button id="glow-prev-damage"    class="glow-prev-btn" data-mode="damage"
+              style="flex:1; padding:4px 0; font-size:.72rem; border-radius:5px; border:1px solid #ff3333; background:rgba(255,51,51,.08); color:#ff3333; cursor:pointer;">🔴</button>
+          </div>
+
+          <!-- Colour pickers -->
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; text-align:center;">
+            <div style="display:flex; flex-direction:column; align-items:center; gap:5px;">
+              <label style="font-size:.72rem; color:var(--muted);">Highlight</label>
+              <input type="color" id="glow-highlight" value="#ffd700"
+                title="Colour when hovering a card to play it"
+                style="width:42px; height:30px; border:none; border-radius:5px; cursor:pointer; background:none; padding:0;" />
+            </div>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:5px;">
+              <label style="font-size:.72rem; color:#4ade80;">Buff / Heal</label>
+              <input type="color" id="glow-buff" value="#22ee66"
+                title="Colour when targeting a friendly for a buff or heal"
+                style="width:42px; height:30px; border:none; border-radius:5px; cursor:pointer; background:none; padding:0;" />
+            </div>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:5px;">
+              <label style="font-size:.72rem; color:#f87171;">Damage</label>
+              <input type="color" id="glow-damage" value="#ff3333"
+                title="Colour when targeting an enemy for damage or destruction"
+                style="width:42px; height:30px; border:none; border-radius:5px; cursor:pointer; background:none; padding:0;" />
+            </div>
+          </div>
+
+          <!-- Ring offset + width sliders -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div style="display:flex; flex-direction:column; gap:5px;">
+              <label style="font-size:.72rem; color:var(--muted); display:flex; justify-content:space-between;">
+                Offset <span id="glow-inset-val">0 px</span>
+              </label>
+              <input type="range" id="glow-inset" min="-30" max="20" step="1" value="0"
+                title="Negative = outside card border · Positive = inside"
+                style="width:100%; accent-color:var(--accent); cursor:pointer;" />
+            </div>
+            <div style="display:flex; flex-direction:column; gap:5px;">
+              <label style="font-size:.72rem; color:var(--muted); display:flex; justify-content:space-between;">
+                Width <span id="glow-width-val">1.0×</span>
+              </label>
+              <input type="range" id="glow-width" min="0.2" max="4" step="0.1" value="1"
+                title="Scale the ring stroke widths"
+                style="width:100%; accent-color:var(--accent); cursor:pointer;" />
+            </div>
+          </div>
+        </div>
+
         <p id="art-canvas-hint" style="display:none; font-size:.75rem; color:var(--muted); text-align:center; line-height:1.6;">
           🖱️ Drag to reposition &nbsp;·&nbsp; Scroll to zoom
         </p>

@@ -368,6 +368,55 @@ export class VFX {
         for (const s of sparks) this._remove(s);
         break;
       }
+      case 'fire': {
+        // Flame particles — rising teardrop shapes with yellow→orange→red colour ramp
+        const count    = step.count    ?? 40;
+        const duration = step.duration ?? 900;
+        const height   = step.height   ?? 110;
+        const spread   = step.spread   ?? 28;
+        const particles = [];
+        // Stagger spawns over the first 60 % of the duration so new flames keep appearing
+        const spawnWindow = duration * 0.6;
+        for (let i = 0; i < count; i++) {
+          const spawnDelay = (i / count) * spawnWindow;
+          const lifespan   = rand(duration * 0.35, duration * 0.8);
+          setTimeout(() => {
+            const g = new PIXI.Graphics();
+            g.x = wx + rand(-spread, spread);
+            g.y = wy + rand(0, 18);
+            const startX = g.x;
+            const startY = g.y;
+            const vx     = rand(-0.45, 0.45);
+            this.container.addChild(g);
+            particles.push(g);
+            const t0 = Date.now();
+            const tick = () => {
+              const p = Math.min(1, (Date.now() - t0) / lifespan);
+              const life = 1 - p;
+              // Colour ramp: white-yellow core → orange mid → dark red tip
+              let r = 255, gv, bv, a;
+              if (p < 0.25)      { gv = Math.round(220 + 35 * (1-p/0.25)); bv = Math.round(80 * (1-p/0.25)); a = life; }
+              else if (p < 0.55) { gv = Math.round(220 * (1-(p-0.25)/0.3)); bv = 0; a = life; }
+              else if (p < 0.78) { r = Math.round(255 - 60*((p-0.55)/0.23)); gv = 0; bv = 0; a = life * 0.85; }
+              else               { r = Math.round(195 - 115*((p-0.78)/0.22)); gv = 0; bv = 0; a = life * 0.5; }
+              const hex = ((r & 0xff) << 16) | ((gv & 0xff) << 8) | (bv & 0xff);
+              const radius = rand(4, 10) * (0.25 + 0.75 * life);
+              g.clear();
+              g.beginFill(hex, Math.max(0, a));
+              g.drawEllipse(0, 0, radius * 0.55, radius); // taller tear-drop
+              g.endFill();
+              g.x = startX + vx * (p * lifespan / 16);
+              g.y = startY - p * height * rand(0.85, 1.15);
+              if (p < 1) requestAnimationFrame(tick);
+              else this._remove(g);
+            };
+            requestAnimationFrame(tick);
+          }, spawnDelay);
+        }
+        await _wait(duration + 80);
+        for (const p of particles) this._remove(p);
+        break;
+      }
       default: break;
     }
   }
@@ -621,10 +670,10 @@ export class VFX {
     flash.endFill();
     flash.x = c.x; flash.y = c.y; flash.alpha = 0.65;
     this.container.addChild(flash);
-    tweenTo(flash, { alpha: 0 }, 260).then(() => this._remove(flash));
+    tweenTo(flash, { alpha: 0 }, 140).then(() => this._remove(flash));
 
     // 2 — shockwave ring
-    await this._shockwave(c.x, c.y, palette.ring, 85, 230);
+    await this._shockwave(c.x, c.y, palette.ring, 85, 130);
 
     // 3 — radial burst
     const sparks = [];
@@ -636,9 +685,9 @@ export class VFX {
       this.container.addChild(g);
       sparks.push(g);
       tweenTo(g, { x: c.x + Math.cos(angle) * dist, y: c.y + Math.sin(angle) * dist, alpha: 0 },
-              rand(380, 620));
+              rand(200, 340));
     }
-    await _wait(680);
+    await _wait(380);
     for (const s of sparks) this._remove(s);
   }
 
@@ -759,8 +808,52 @@ export class VFX {
       await _wait(i * 60);
       const c = _cardWorld(cv);
       this._shockwave(c.x, c.y, color, 70, 250);
+      // Fire particles rising from each hit target (runs in parallel with burst)
+      this._fireAt(c.x, c.y);
       return this.burstAt(c.x, c.y, color, 22);
     }));
+  }
+
+  /**
+   * Internal: spawn rising flame particles at a world position.
+   * Used by aoeBlast to show fire on damaged targets.
+   */
+  _fireAt(wx, wy, count = 38, height = 100, spread = 22, duration = 820) {
+    const spawnWindow = duration * 0.55;
+    for (let i = 0; i < count; i++) {
+      const spawnDelay = (i / count) * spawnWindow;
+      const lifespan   = rand(duration * 0.35, duration * 0.75);
+      setTimeout(() => {
+        const g = new PIXI.Graphics();
+        g.x = wx + rand(-spread, spread);
+        g.y = wy + rand(0, 16);
+        const startX = g.x;
+        const startY = g.y;
+        const vx     = rand(-0.4, 0.4);
+        this.container.addChild(g);
+        const t0 = Date.now();
+        const tick = () => {
+          const p = Math.min(1, (Date.now() - t0) / lifespan);
+          const life = 1 - p;
+          let r = 255, gv, bv, a;
+          if      (p < 0.25) { gv = Math.round(220 + 35 * (1 - p / 0.25)); bv = Math.round(80 * (1 - p / 0.25)); a = life; }
+          else if (p < 0.55) { gv = Math.round(220 * (1 - (p - 0.25) / 0.30)); bv = 0; a = life; }
+          else if (p < 0.78) { r  = Math.round(255 - 60  * ((p - 0.55) / 0.23)); gv = 0; bv = 0; a = life * 0.85; }
+          else               { r  = Math.round(195 - 115 * ((p - 0.78) / 0.22)); gv = 0; bv = 0; a = life * 0.5;  }
+          const hex    = ((r & 0xff) << 16) | ((gv & 0xff) << 8) | (bv & 0xff);
+          const radius = rand(4, 10) * (0.25 + 0.75 * life);
+          g.clear();
+          g.beginFill(hex, Math.max(0, a));
+          g.drawEllipse(0, 0, radius * 0.55, radius);
+          g.endFill();
+          g.x = startX + vx * (p * lifespan / 16);
+          g.y = startY  - p * height * rand(0.85, 1.15);
+          if (p < 1) requestAnimationFrame(tick);
+          else       this._remove(g);
+        };
+        requestAnimationFrame(tick);
+      }, spawnDelay);
+    }
   }
 
   /**

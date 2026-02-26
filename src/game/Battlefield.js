@@ -16,7 +16,8 @@ export class Battlefield extends PIXI.Container {
     this._placed = [];           // { cardView } in left→right order
     this._pendingIndex = 0;      // insert index chosen during drag
     this._lastPendingIndex = -1; // tracks last spread index to avoid re-tweening
-    this.onCardPlaced  = null;    // optional callback(cardView) after placement
+    this.onCardLanded = null;    // optional callback(cardView) at moment of impact — runs parallel with spring
+    this.onCardPlaced  = null;    // optional callback(cardView) after summon + spring both done
     this.onCardRemoved = null;    // optional callback(cardView) after removal
     this._vfx = null;             // set via setVFX() to suppress ring burst for faction presets
     this._buildHitArea();
@@ -229,12 +230,16 @@ export class Battlefield extends PIXI.Container {
         // 3. Squash on impact
         cardView.y = 0;
         cardView.scale.set(1.22, 0.72);
-        // Notify listener and await it — summon VFX + battlecry are async
-        if (this.onCardPlaced) await this.onCardPlaced(cardView);
-        // 4. Spring scale back to normal, then attach hover
-        return tweenToBack(cardView.scale, { x: 1, y: 1 }, 280);
+        // 4. Spring back + summon VFX run simultaneously
+        const springPromise = tweenToBack(cardView.scale, { x: 1, y: 1 }, 280);
+        const landedPromise = this.onCardLanded ? this.onCardLanded(cardView) : Promise.resolve();
+        await Promise.all([springPromise, landedPromise]);
       })
-      .then(() => this._attachHover(cardView));
+      .then(() => this._attachHover(cardView))
+      .then(async () => {
+        // 5. Both done — now fire battlecry/on-play effects
+        if (this.onCardPlaced) await this.onCardPlaced(cardView);
+      });
   }
 
   // Expanding golden ring that fades out, driven by PIXI.Ticker so it
@@ -305,10 +310,13 @@ export class Battlefield extends PIXI.Container {
     cardView.on('pointerover', () => {
       tweenTo(cardView,       { y: -LIFT }, 120);
       tweenTo(cardView.scale, { x: SCALE, y: SCALE }, 120);
+      // Don't overwrite a targeting glow (red/green) with the yellow hover glow
+      if (!cardView._currentTargetMult) cardView.setHighlight(true);
     });
     cardView.on('pointerout', () => {
       tweenTo(cardView,       { y: 0 }, 150);
       tweenTo(cardView.scale, { x: 1.0, y: 1.0 }, 150);
+      if (!cardView._currentTargetMult) cardView.setHighlight(false);
     });
   }
 }

@@ -12,6 +12,30 @@ let _combat        = null; // CombatSystem reference for animation gating
 let _rations       = null; // RationsDisplay for the player
 let _pendingPlays  = [];   // queued { card, hit, dropPos } during animations
 
+// ── Drag physics ─────────────────────────────────────────────────────────────
+let _prevX       = 0;   // pointer x last frame
+let _prevY       = 0;   // pointer y last frame
+let _velX        = 0;   // smoothed horizontal velocity
+let _tiltTarget  = 0;   // rotation we're springing toward (radians)
+let _tiltCurrent = 0;   // current spring value
+let _tiltVel     = 0;   // spring velocity
+
+const TILT_MAX    = 0.62;  // max tilt ~35°
+const TILT_SCALE  = 0.011; // how much velocity maps to tilt
+const SPRING_K    = 0.10;  // spring stiffness (lower = more lag)
+const SPRING_DAMP = 0.62;  // spring damping (lower = more wobble)
+
+function _tiltTick() {
+  if (!_dragging) return;
+  // Spring toward target
+  const delta = _tiltTarget - _tiltCurrent;
+  _tiltVel     = _tiltVel * SPRING_DAMP + delta * SPRING_K;
+  _tiltCurrent += _tiltVel;
+  _dragging.rotation = _tiltCurrent;
+  // Decay target toward 0 when pointer is still
+  _tiltTarget *= 0.92;
+}
+
 export function setCombatRef(cs) { _combat = cs; }
 export function setRationsRef(r)  { _rations = r; }
 export function setAllFields(fields) { _allFields = fields; }
@@ -49,6 +73,8 @@ export function initDragDrop(app, hand, ...fields) {
   app.stage.on('pointermove', _onMove);
   app.stage.on('pointerup',   _onUp);
   app.stage.on('pointerupoutside', _onUp);
+
+  app.ticker.add(_tiltTick);
 }
 
 export function makeDraggable(cardView) {
@@ -85,7 +111,6 @@ function _onDown(e) {
     _returning = null;
     // card.x/y are already correct global coords — just start dragging
     card.rotation = 0;
-    card.setHighlight(true);
     _originIndex = 0; // will be re-inserted at front if dropped off field
     _dragging = card;
     return;
@@ -113,26 +138,55 @@ function _onDown(e) {
   card.x        = global.x;
   card.y        = global.y;
   card.rotation = 0;
-  card.setHighlight(true);
 
   CardPreview.isDragging = true;
   CardPreview.hide();
+  // Seed physics so first delta is 0
+  _prevX = global.x; _prevY = global.y;
+  _velX = 0; _tiltTarget = 0; _tiltCurrent = 0; _tiltVel = 0;
   _dragging = card;
 }
 
 function _onMove(e) {
   if (!_dragging) return;
+
+  // Compute smoothed horizontal velocity for tilt
+  const dx = e.global.x - _prevX;
+  _velX   = _velX * 0.45 + dx * 0.55;
+  _tiltTarget = Math.max(-TILT_MAX, Math.min(TILT_MAX, _velX * TILT_SCALE));
+  _prevX  = e.global.x;
+  _prevY  = e.global.y;
+
   _dragging.x = e.global.x;
   _dragging.y = e.global.y;
   const isSpell = _dragging.card?.type === 'spell';
-  _fields.forEach(f => {
-    // For spells, highlight even over a full field
-    if (isSpell && f.isOverFieldIgnoreFull(e.global.x, e.global.y)) {
-      f._lastPendingIndex = -1; // suppress spread animation
-    } else {
-      f.updateHighlight(e.global.x, e.global.y);
-    }
-  });
+
+  // Check whether the card is over an opponent field (not in _fields)
+  const opponentFields = _allFields.filter(f => !_fields.includes(f));
+  const overOpponent   = opponentFields.find(f =>
+    isSpell ? f.isOverFieldIgnoreFull(e.global.x, e.global.y)
+            : f.isOverField(e.global.x, e.global.y)
+  );
+
+  if (overOpponent) {
+    // Mirror the x position onto the player field so the insertion slot highlights there.
+    // Works for both minions (shows gap indicator) and spells (shows field glow).
+    _fields.forEach(f => {
+      const mirrorGlobal = f.toGlobal({ x: 0, y: 0 });
+      f.updateHighlight(e.global.x, mirrorGlobal.y);
+    });
+    // Clear any lingering highlights on opponent fields
+    opponentFields.forEach(f => f.clearHighlights());
+  } else {
+    _fields.forEach(f => {
+      // For spells, highlight even over a full field
+      if (isSpell && f.isOverFieldIgnoreFull(e.global.x, e.global.y)) {
+        f._lastPendingIndex = -1; // suppress spread animation
+      } else {
+        f.updateHighlight(e.global.x, e.global.y);
+      }
+    });
+  }
 }
 
 function _onUp(e) {
@@ -142,12 +196,46 @@ function _onUp(e) {
   _dragging  = null;
   CardPreview.isDragging = false;
 
-  card.setHighlight(false);
   _fields.forEach(f => f.clearHighlights());
+  _allFields.filter(f => !_fields.includes(f)).forEach(f => f.clearHighlights());
+
+  // Reset tilt physics
+  _tiltTarget  = 0;
+  _tiltCurrent = 0;
+  _tiltVel     = 0;
+  card.rotation = 0;
 
   const isSpellCard = card.card?.type === 'spell';
+
+  // Check whether the drop was over an opponent field
+  const opponentFields = _allFields.filter(f => !_fields.includes(f));
+  const overOpponentField = opponentFields.find(f =>
+    isSpellCard ? f.isOverFieldIgnoreFull(e.global.x, e.global.y)
+                : f.isOverField(e.global.x, e.global.y)
+  );
+
+  // If dropped onto opponent field, reroute:
+  //   spells  → treat as if dropped on a player field (same spell activation)
+  //   minions → place on player field at the matching x-slot
+  let redirectHit = null;
+  if (overOpponentField) {
+    if (isSpellCard) {
+      // Use the first player field for spell activation
+      redirectHit = _fields[0] ?? null;
+    } else {
+      // Find a non-full player field
+      const pf = _fields.find(f => !f.isFull);
+      if (pf) {
+        // Mirror x from the drop position, y from the player field centre
+        const pfGlobal = pf.toGlobal({ x: 0, y: 0 });
+        pf.updateHighlight(e.global.x, pfGlobal.y);
+        redirectHit = pf;
+      }
+    }
+  }
+
   // Normal slot-based hit (respects isFull for minions)
-  let hit = _fields.find(f => f.getSlotAt(e.global.x, e.global.y));
+  let hit = redirectHit ?? _fields.find(f => f.getSlotAt(e.global.x, e.global.y));
   // Spells don't occupy a slot — allow drop anywhere over the field even when full
   if (!hit && isSpellCard) {
     hit = _fields.find(f => f.isOverFieldIgnoreFull(e.global.x, e.global.y));
@@ -229,9 +317,11 @@ function _onUp(e) {
     }
 
     // Refresh _pendingIndex from the exact drop coordinates before placing.
-    // This ensures a fast drop without many move events still lands in the
-    // right slot. placeCard cancels any spread tweens itself.
-    hit.updateHighlight(e.global.x, e.global.y);
+    // When redirected from an opponent-field drop, the real drop y is outside
+    // the player field, so we substitute the player field's own centre y so
+    // isOverField passes and _pendingIndex is computed correctly.
+    const hitCentreY = redirectHit ? hit.toGlobal({ x: 0, y: 0 }).y : e.global.y;
+    hit.updateHighlight(e.global.x, hitCentreY);
     const dropPos = { x: e.global.x, y: e.global.y };
 
     if (_combat?._animating) {
