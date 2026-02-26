@@ -113,8 +113,8 @@ export function init(app) {
   setSpellCallback(async cv => {
     // Spell cast flash — fires a burst ring at the card's current world position
     // (card is still alive and fading during the expand tween in DragDrop)
-    vfx.battlecryBurst(cv).catch(() => {});
-    vfx.screenShake(6, 200).catch(() => {});
+    await vfx.battlecryBurst(cv).catch(() => {});
+    await vfx.screenShake(6, 200).catch(() => {});
     const eff = cv.card.onPlayEffect;
     if (!eff?.id) return;
     const meta = EFFECTS_BY_ID[eff.id];
@@ -165,7 +165,7 @@ export function init(app) {
     }
     const eff = cardView.card.onPlayEffect;
     if (eff?.id) {
-      vfx.battlecryBurst(cardView, faction).catch(() => {});
+      await vfx.battlecryBurst(cardView, faction).catch(() => {});
       const meta = EFFECTS_BY_ID[eff.id];
       if (meta?.requiresTarget) {
         const pool = (meta.targetAny
@@ -184,7 +184,7 @@ export function init(app) {
           }
         }
       } else {
-        applyOnPlay(eff.id, eff.value ?? 1, playerField, opponentField, combat, playerMorale, opponentMorale, playerRations, null, vfx, cardView, _playerDrawCb);
+        await applyOnPlay(eff.id, eff.value ?? 1, playerField, opponentField, combat, playerMorale, opponentMorale, playerRations, null, vfx, cardView, _playerDrawCb);
       }
     }
   };
@@ -202,7 +202,7 @@ export function init(app) {
     }
     const eff = cardView.card.onPlayEffect;
     if (eff?.id) {
-      vfx.battlecryBurst(cardView, faction).catch(() => {});
+      await vfx.battlecryBurst(cardView, faction).catch(() => {});
       const meta = EFFECTS_BY_ID[eff.id];
       let chosenTarget = null;
       if (meta?.requiresTarget) {
@@ -217,7 +217,7 @@ export function init(app) {
         if (pool.length > 0) chosenTarget = pool[Math.floor(Math.random() * pool.length)];
       }
       if (!meta?.requiresTarget || chosenTarget) {
-        applyOnPlay(eff.id, eff.value ?? 1, opponentField, playerField, combat, opponentMorale, playerMorale, opponentRations, chosenTarget, vfx, cardView, { drawCard: () => { drawCardToOpponentHand(opponentDeck); opponentDeckView.setCount(opponentDeck.length); } });
+        await applyOnPlay(eff.id, eff.value ?? 1, opponentField, playerField, combat, opponentMorale, playerMorale, opponentRations, chosenTarget, vfx, cardView, { drawCard: () => { drawCardToOpponentHand(opponentDeck); opponentDeckView.setCount(opponentDeck.length); } });
       }
     }
   };

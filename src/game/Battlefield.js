@@ -224,13 +224,13 @@ export class Battlefield extends PIXI.Container {
     if (!hasCustomVfx) this._spawnRingBurst(destX, 0);
 
     // 2. Fast fall onto the slot (accelerating ease)
-    tweenToFast(cardView, { x: destX, y: 12 }, 160)
-      .then(() => {
+    return tweenToFast(cardView, { x: destX, y: 12 }, 160)
+      .then(async () => {
         // 3. Squash on impact
         cardView.y = 0;
         cardView.scale.set(1.22, 0.72);
-        // Notify listener now — card is at its final world position
-        this.onCardPlaced?.(cardView);
+        // Notify listener and await it — summon VFX + battlecry are async
+        if (this.onCardPlaced) await this.onCardPlaced(cardView);
         // 4. Spring scale back to normal, then attach hover
         return tweenToBack(cardView.scale, { x: 1, y: 1 }, 280);
       })

@@ -362,16 +362,16 @@ export const OpponentAI = {
           // 3. Brief pause — AI "holds" the card above the field
           return new Promise(r => setTimeout(r, PLAY_STAGGER));
         })
-        .then(() => {
-          // 4. Drop it — placeCard reparents to field and runs the squash animation
+        .then(async () => {
+          // 4. Drop it — placeCard reparents to field, runs squash + summon VFX + battlecry
           if (!_opponentField.isFull) {
             _opponentField._pendingIndex = _opponentField._placed.length;
-            _opponentField.placeCard(cardView, null);
-            // Spend rations for the AI
+            // Spend rations for the AI before the animation so stats are correct
             if (_rations) _rations.spend(cardView.card?.manaCost ?? 0);
+            // Await the full chain: drop animation + onCardPlaced (summon VFX + battlecry)
+            await _opponentField.placeCard(cardView, null).catch(() => {});
           }
-          // Wait for the drop + spring animation (~500ms) before the next card
-          setTimeout(resolve, 520);
+          resolve();
         });
     });
   },
