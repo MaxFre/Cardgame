@@ -103,6 +103,8 @@ function autoLayout(n) {
 
 // ── File persistence ─────────────────────────────────────────────────────────
 async function saveHandLayoutToFile() {
+  let handLayoutConfig;
+  try { handLayoutConfig = JSON.parse(localStorage.getItem('hand-layout-config') || 'null'); } catch { /* ignore */ }
   try {
     await fetch('/api/save-hand-layout', {
       method:  'POST',
@@ -110,6 +112,7 @@ async function saveHandLayoutToFile() {
       body:    JSON.stringify({
         handSlots:         loadAll('player'),
         opponentHandSlots: loadAll('opponent'),
+        ...(handLayoutConfig ? { handLayoutConfig } : {}),
       }),
     });
   } catch { /* dev server not reachable — localStorage is still updated */ }

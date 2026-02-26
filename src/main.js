@@ -23,6 +23,7 @@ async function syncLayoutFromFile() {
     if (data.handArtBox)         localStorage.setItem('card-hand-art-box',              JSON.stringify(data.handArtBox));
     if (data.handSlots)          localStorage.setItem('hand-slot-positions',            JSON.stringify(data.handSlots));
     if (data.opponentHandSlots)  localStorage.setItem('hand-slot-positions-opponent',   JSON.stringify(data.opponentHandSlots));
+    if (data.handLayoutConfig)   localStorage.setItem('hand-layout-config',             JSON.stringify(data.handLayoutConfig));
   } catch { /* file missing — localStorage fallback is used below */ }
 }
 

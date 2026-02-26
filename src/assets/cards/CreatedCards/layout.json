@@ -57,5 +57,11 @@
     "y": 43,
     "w": 234,
     "h": 261
+  },
+  "handLayoutConfig": {
+    "angle": 6,
+    "arc": 6,
+    "hover": 30,
+    "spacing": 145
   }
 }

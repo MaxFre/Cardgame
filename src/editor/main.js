@@ -130,10 +130,13 @@ let fieldCircle = loadFieldCircle();
 
 // ── Persist all layout data to layout.json via the Vite dev server ────────────
 function _saveLayoutToFile() {
+  let handLayoutConfig;
+  try { handLayoutConfig = JSON.parse(localStorage.getItem('hand-layout-config') || 'null'); } catch { /* ignore */ }
   const payload = JSON.stringify({
     statLayout:  layout,
     fieldCircle: fieldCircle,
     handArtBox:  handArtBox,
+    ...(handLayoutConfig ? { handLayoutConfig } : {}),
   }, null, 2);
   fetch('/api/save-layout', {
     method: 'POST',
@@ -1594,8 +1597,9 @@ _saveLayoutToFile();
 
   document.getElementById('btn-hand-apply').addEventListener('click', () => {
     localStorage.setItem(HLKEY, JSON.stringify(hlCfg));
+    _saveLayoutToFile();  // bake hand-layout-config into layout.json for deployment
     const t = document.getElementById('save-toast');
-    t.textContent = '✔ Hand layout saved!';
+    t.textContent = '\u2714 Hand layout saved!';
     t.style.opacity = '1'; t.style.transform = 'translateX(-50%) translateY(0)';
     setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(-50%) translateY(20px)'; }, 2200);
   });

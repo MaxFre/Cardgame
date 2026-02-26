@@ -44,16 +44,19 @@ function cardStoragePlugin() {
         });
       });
 
-      // POST /api/save-layout
+      // POST /api/save-layout — merges with existing layout.json so handSlots aren't lost
       server.middlewares.use('/api/save-layout', (req, res) => {
         if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
         let body = '';
         req.on('data', chunk => (body += chunk));
         req.on('end', () => {
           try {
-            JSON.parse(body);
+            const incoming = JSON.parse(body);
+            let existing = {};
+            try { existing = JSON.parse(fs.readFileSync(LAYOUT_FILE, 'utf-8')); } catch { /* first write */ }
+            const merged = JSON.stringify({ ...existing, ...incoming }, null, 2);
             fs.mkdirSync(CREATED_CARDS_DIR, { recursive: true });
-            writeWithPublicMirror(LAYOUT_FILE, PUBLIC_LAYOUT, body);
+            writeWithPublicMirror(LAYOUT_FILE, PUBLIC_LAYOUT, merged);
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ ok: true }));
           } catch (e) {
