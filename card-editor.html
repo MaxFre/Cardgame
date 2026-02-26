@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Card Editor</title>
+    <style>
+      *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+      :root {
+        --bg:        #0f1117;
+        --surface:   #1a1d27;
+        --surface2:  #22263a;
+        --border:    #2e3250;
+        --accent:    #4f6ef7;
+        --accent2:   #7c3aed;
+        --danger:    #ef4444;
+        --text:      #e2e8f0;
+        --muted:     #6b7280;
+        --gold:      #f1c40f;
+        --radius:    10px;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      header {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 14px 28px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      header h1 { font-size: 1.3rem; font-weight: 700; letter-spacing: .04em; }
+      header span { font-size: .8rem; color: var(--muted); }
+
+      .workspace {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        gap: 0;
+        overflow: hidden;
+      }
+
+      /* ── Left panel – preview ─────────────────────────────── */
+      .preview-panel {
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 28px 20px;
+        gap: 20px;
+        overflow-y: auto;
+      }
+
+      .preview-panel h2 { font-size: .85rem; text-transform: uppercase;
+        letter-spacing: .1em; color: var(--muted); align-self: flex-start; }
+
+      #card-canvas {
+        border-radius: 12px;
+        box-shadow: 0 8px 40px rgba(0,0,0,.7);
+        cursor: default;
+      }
+
+      .btn {
+        width: 100%;
+        padding: 10px 16px;
+        border: none;
+        border-radius: var(--radius);
+        font-size: .9rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: filter .15s, transform .1s;
+      }
+      .btn:hover  { filter: brightness(1.15); }
+      .btn:active { transform: scale(.97); }
+      .btn-primary  { background: var(--accent);  color: #fff; }
+      .btn-purple   { background: var(--accent2); color: #fff; }
+      .btn-danger   { background: var(--danger);  color: #fff; }
+      .btn-outline  {
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+      .btn-outline:hover  { background: var(--surface2); }
+      .btn-outline.active {
+        background: var(--surface2);
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      .btn-group { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+
+      /* ── Right panel – form ───────────────────────────────── */
+      .form-panel {
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        padding: 28px 32px;
+        gap: 24px;
+        max-width: 780px;
+      }
+
+      .form-panel h2 { font-size: 1rem; font-weight: 700; }
+
+      .form-section {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .form-section legend {
+        font-size: .78rem;
+        text-transform: uppercase;
+        letter-spacing: .1em;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+
+      .field { display: flex; flex-direction: column; gap: 6px; }
+      .field label { font-size: .85rem; font-weight: 600; color: var(--muted); }
+      .field input[type="text"],
+      .field input[type="number"],
+      .field textarea {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--text);
+        font-size: .95rem;
+        padding: 8px 12px;
+        outline: none;
+        transition: border-color .15s;
+        width: 100%;
+      }
+      .field input:focus,
+      .field textarea:focus { border-color: var(--accent); }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 14px;
+      }
+
+      .stat-field {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+      .stat-field label {
+        font-size: .8rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+      }
+      .stat-field.mana   label { color: #60a5fa; }
+      .stat-field.attack label { color: #f97316; }
+      .stat-field.health label { color: #ef4444; }
+
+      .stat-spinner {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .stat-spinner button {
+        background: none;
+        border: none;
+        color: var(--text);
+        font-size: 1.1rem;
+        padding: 6px 12px;
+        cursor: pointer;
+        transition: background .1s;
+      }
+      .stat-spinner button:hover { background: var(--border); }
+      .stat-spinner input {
+        width: 48px;
+        text-align: center;
+        background: none;
+        border: none;
+        border-left: 1px solid var(--border);
+        border-right: 1px solid var(--border);
+        color: var(--text);
+        font-size: 1rem;
+        font-weight: 700;
+        padding: 6px 0;
+        outline: none;
+      }
+
+      /* Image upload */
+      .upload-area {
+        border: 2px dashed var(--border);
+        border-radius: var(--radius);
+        padding: 24px;
+        text-align: center;
+        cursor: pointer;
+        transition: border-color .2s, background .2s;
+        position: relative;
+      }
+      .upload-area:hover,
+      .upload-area.drag-over {
+        border-color: var(--accent);
+        background: rgba(79, 110, 247, .06);
+      }
+      .upload-area input[type="file"] {
+        position: absolute; inset: 0; opacity: 0; cursor: pointer;
+      }
+      .upload-area .upload-icon { font-size: 2rem; margin-bottom: 8px; }
+      .upload-area p { font-size: .85rem; color: var(--muted); }
+      .upload-area p strong { color: var(--accent); }
+
+      .img-preview-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      #art-thumb {
+        width: 60px;
+        height: 60px;
+        object-fit: cover;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        display: none;
+      }
+      #art-name { font-size: .82rem; color: var(--muted); }
+      #clear-art {
+        background: none; border: none;
+        color: var(--danger); cursor: pointer;
+        font-size: .82rem; margin-left: auto;
+        display: none;
+      }
+
+      /* ── Collection ──────────────────────────────────────── */
+      .collection-panel {
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+        padding: 20px 32px;
+      }
+      .collection-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+      .collection-header h2 { font-size: .85rem; text-transform: uppercase;
+        letter-spacing: .1em; color: var(--muted); }
+      .collection-actions { display: flex; gap: 8px; }
+      .collection-actions .btn { width: auto; padding: 7px 16px; font-size: .8rem; }
+
+      .card-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        min-height: 80px;
+        max-height: 480px;
+        overflow-y: auto;
+        padding-bottom: 4px;
+      }
+
+      .card-thumb {
+        position: relative;
+        cursor: pointer;
+        border-radius: 8px;
+        border: 2px solid transparent;
+        transition: border-color .15s, transform .15s;
+      }
+      .card-thumb:hover { transform: translateY(-3px); border-color: var(--accent); }
+      .card-thumb.active { border-color: var(--gold); }
+
+      .card-thumb canvas {
+        display: block;
+        border-radius: 6px;
+      }
+
+      .card-thumb .thumb-del {
+        position: absolute;
+        top: -6px; right: -6px;
+        background: var(--danger);
+        color: #fff;
+        border: none;
+        border-radius: 50%;
+        width: 20px; height: 20px;
+        font-size: .7rem;
+        cursor: pointer;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+      }
+      .card-thumb:hover .thumb-del { display: flex; }
+
+      .empty-collection {
+        color: var(--muted);
+        font-size: .85rem;
+        padding: 12px 0;
+      }
+
+      .rarity-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .rarity-btn {
+        padding: 5px 14px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--surface2);
+        color: var(--muted);
+        font-size: .8rem;
+        cursor: pointer;
+        transition: all .15s;
+      }
+      .rarity-btn.active, .rarity-btn:hover { border-color: currentColor; }
+      .rarity-btn[data-rarity="common"].active   { color: #9ca3af; border-color: #9ca3af; background: rgba(156,163,175,.1); }
+      .rarity-btn[data-rarity="rare"].active     { color: #60a5fa; border-color: #60a5fa; background: rgba(96,165,250,.1); }
+      .rarity-btn[data-rarity="epic"].active     { color: #a855f7; border-color: #a855f7; background: rgba(168,85,247,.1); }
+      .rarity-btn[data-rarity="legendary"].active{ color: var(--gold); border-color: var(--gold); background: rgba(241,196,15,.1); }
+
+      .type-row {
+        display: flex;
+        gap: 8px;
+      }
+      .type-btn {
+        flex: 1;
+        text-align: center;
+        padding: 7px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--surface2);
+        color: var(--muted);
+        font-size: .82rem;
+        cursor: pointer;
+        transition: all .15s;
+      }
+      .type-btn.active, .type-btn:hover { color: var(--text); border-color: var(--accent); background: rgba(79,110,247,.15); }
+
+      .faction-row { display: flex; gap: 8px; }
+      .faction-btn {
+        flex: 1;
+        text-align: center;
+        padding: 7px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--surface2);
+        color: var(--muted);
+        font-size: .82rem;
+        cursor: pointer;
+        transition: all .15s;
+      }
+      .faction-btn[data-faction="Magical"].active { color: #c084fc; border-color: #c084fc; background: rgba(192,132,252,.12); }
+      .faction-btn[data-faction="Wild"].active    { color: #4ade80; border-color: #4ade80; background: rgba(74,222,128,.12); }
+      .faction-btn[data-faction="Folk"].active    { color: #fbbf24; border-color: #fbbf24; background: rgba(251,191,36,.12); }
+      .faction-btn:hover { filter: brightness(1.2); }
+
+      /* ── Hand Layout Editor ───────────────────────────── */
+      .hand-layout-panel {
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+        padding: 28px 32px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+      .hand-layout-panel h2 {
+        font-size: .85rem;
+        text-transform: uppercase;
+        letter-spacing: .1em;
+        color: var(--muted);
+      }
+      #hand-canvas {
+        width: 100%;
+        max-width: 900px;
+        height: 240px;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        cursor: crosshair;
+        display: block;
+      }
+      .hand-sliders {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 14px;
+      }
+      .slider-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .slider-field label {
+        font-size: .82rem;
+        font-weight: 600;
+        color: var(--muted);
+        display: flex;
+        justify-content: space-between;
+      }
+      .slider-field input[type=range] {
+        width: 100%;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+      .hand-layout-hint {
+        font-size: .75rem;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>⚔️ Card Editor</h1>
+      <span>Create and manage your cards</span>
+      <a href="/hand-editor.html" style="margin-left:auto; padding:7px 14px; background:#374151; color:#fff; border-radius:6px; font-size:.82rem; font-weight:600; text-decoration:none;">🃏 Hand Layout</a>
+      <a href="/" style="padding:7px 14px; background:#374151; color:#fff; border-radius:6px; font-size:.82rem; font-weight:600; text-decoration:none;">← Game</a>
+    </header>
+
+    <div class="workspace">
+      <!-- ── Preview panel ── -->
+      <aside class="preview-panel">
+        <h2>Preview</h2>
+        <canvas id="card-canvas" width="256" height="384"></canvas>
+
+        <!-- View mode toggle -->
+        <div style="display:flex; gap:6px; width:100%;">
+          <button id="btn-view-hand"  class="btn btn-outline active" style="flex:1; padding:7px; font-size:.8rem;">🃏 Hand</button>
+          <button id="btn-view-field" class="btn btn-outline"        style="flex:1; padding:7px; font-size:.8rem;">⚔️ Field</button>
+        </div>
+        <p id="art-canvas-hint" style="display:none; font-size:.75rem; color:var(--muted); text-align:center; line-height:1.6;">
+          🖱️ Drag to reposition &nbsp;·&nbsp; Scroll to zoom
+        </p>
+        <button class="btn btn-outline" id="btn-reset-art" style="display:none; padding:6px 14px; font-size:.8rem;">↺ Reset Position</button>
+        <p style="font-size:.72rem; color:var(--muted); text-align:center; line-height:1.5; margin:0;">⚔️ Drag the <b style="color:#f97316">⚔ATK</b> · <b style="color:#ef4444">❤HP</b> · <b style="color:#60a5fa">💧Mana</b> · <b style="color:#ffd700">Name</b> to reposition</p>
+        <p id="hand-art-hint" style="font-size:.72rem; color:var(--muted); text-align:center; line-height:1.5; margin:0;"><b style="color:#aaa">⬜ Drag crosshair</b> to move art window · <b style="color:#aaa">white dot</b> (corner) to resize</p>
+        <p id="field-circle-hint" style="display:none; font-size:.72rem; color:var(--muted); text-align:center; line-height:1.5; margin:0;"><b style="color:#aaa">🔵 Drag crosshair</b> to move circle · <b style="color:#aaa">white dot</b> to resize</p>
+        <button class="btn btn-outline" id="btn-reset-stats" style="padding:6px 14px; font-size:.8rem;">↺ Reset This View's Positions</button>
+        <button class="btn btn-outline" id="btn-reset-hand-art" style="padding:6px 14px; font-size:.8rem;">↺ Reset Art Window</button>
+        <button class="btn btn-outline" id="btn-reset-circle" style="display:none; padding:6px 14px; font-size:.8rem;">↺ Reset Circle Window</button>
+        <div class="btn-group">
+          <button class="btn btn-primary"  id="btn-save">💾 Save Card</button>
+          <button class="btn btn-purple"   id="btn-play">▶ Play Game</button>
+          <button class="btn btn-outline"  id="btn-new">✨ New Card</button>
+          <button class="btn btn-danger"   id="btn-discard" style="display:none">🗑️ Discard Changes</button>
+        </div>
+      </aside>
+
+      <!-- ── Form panel ── -->
+      <main class="form-panel">
+
+        <div class="form-section">
+          <legend>Identity</legend>
+
+          <div class="field">
+            <label for="f-name">Card Name</label>
+            <input type="text" id="f-name" placeholder="e.g. Fire Drake" maxlength="30" />
+          </div>
+
+          <div>
+            <div class="field" style="margin-bottom:8px">
+              <label>Type</label>
+            </div>
+            <div class="type-row" id="type-row">
+              <button class="type-btn active" data-type="minion">🐉 Minion</button>
+              <button class="type-btn" data-type="spell">✨ Spell</button>
+              <button class="type-btn" data-type="weapon">⚔️ Weapon</button>
+            </div>
+          </div>
+
+          <div>
+            <div class="field" style="margin-bottom:8px">
+              <label>Rarity</label>
+            </div>
+            <div class="rarity-row" id="rarity-row">
+              <button class="rarity-btn active" data-rarity="common">Common</button>
+              <button class="rarity-btn" data-rarity="rare">Rare</button>
+              <button class="rarity-btn" data-rarity="epic">Epic</button>
+              <button class="rarity-btn" data-rarity="legendary">Legendary</button>
+            </div>
+          </div>
+
+          <div>
+            <div class="field" style="margin-bottom:8px">
+              <label>Faction</label>
+            </div>
+            <div class="faction-row" id="faction-row">
+              <button class="faction-btn" data-faction="Magical">✨ Magical</button>
+              <button class="faction-btn" data-faction="Wild">🌿 Wild</button>
+              <button class="faction-btn active" data-faction="Folk">🏘 Folk</button>
+            </div>
+            <div class="slider-field" style="margin-top:8px">
+              <label>Icon size <span id="icon-size-val">56</span>px</label>
+              <input type="range" id="icon-size-slider" min="10" max="200" step="1" value="56">
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="f-desc">Description / Flavour Text</label>
+            <textarea id="f-desc" rows="2" placeholder="Battlecry: Deal 3 damage…" style="resize:vertical;font-family:inherit"></textarea>
+          </div>
+
+          <!-- On-play effect -->
+          <div class="field">
+            <label for="f-effect">On Play Effect</label>
+            <select id="f-effect" style="width:100%;padding:4px 6px;background:#1e1e2e;color:#e0e0f0;border:1px solid #444;border-radius:4px;font-family:inherit;font-size:13px">
+              <option value="">— None —</option>
+              <option value="deal_damage_random_enemy">Battlecry: Deal damage to a random enemy</option>
+              <option value="deal_damage_all_enemies">Battlecry: Deal X damage to ALL enemies</option>
+              <option value="draw_a_card">Battlecry: Draw X cards</option>
+              <option value="heal_random_friendly">Battlecry: Heal a random friendly</option>
+              <option value="gain_morale">Battlecry: Gain X Morale</option>
+              <option value="drain_morale">Battlecry: Drain X Morale from opponent</option>
+              <option value="gain_ration_this_turn">Spell: Gain X extra Rations this turn</option>
+              <option value="spell_gain_morale">Spell: Gain X Morale</option>
+              <option value="spell_drain_morale">Spell: Drain X Morale from opponent</option>
+              <option value="spell_attack_buff">Spell: Give any minion +X Attack this turn</option>
+              <option value="spell_attack_debuff">Spell: Give any minion -X Attack this turn</option>
+              <option value="spell_stat_buff">Spell: Give any minion +X Attack and +X Health this turn</option>
+              <option value="spell_stat_buff_perm">Spell: Permanently give any minion +X Attack and +X Health</option>
+              <option value="spell_stat_debuff_perm">Spell: Permanently reduce any minion by -X Attack and -X Health</option>
+              <option value="spell_damage_all_enemies">Spell: Deal X damage to ALL enemies</option>
+              <option value="spell_draw_a_card">Spell: Draw X cards</option>
+              <option value="destroy_a_minion">Battlecry: Destroy any minion</option>
+              <option value="spell_destroy_a_minion">Spell: Destroy any minion</option>
+            </select>
+          </div>
+          <div class="field" id="effect-value-row" style="display:none">
+            <label for="f-effect-value">Amount</label>
+            <div class="stat-spinner">
+              <button id="effect-val-minus">−</button>
+              <input type="number" id="f-effect-value" value="3" min="1" max="20" style="width:60px;text-align:center" />
+              <button id="effect-val-plus">+</button>
+            </div>
+          </div>
+
+          <!-- When Killed (deathrattle) effect -->
+          <div class="field">
+            <label for="f-death-effect">When Killed Effect</label>
+            <select id="f-death-effect" style="width:100%;padding:4px 6px;background:#1e1e2e;color:#e0e0f0;border:1px solid #444;border-radius:4px;font-family:inherit;font-size:13px">
+              <option value="">— None —</option>
+              <option value="deathrattle_damage_all_enemies">Deathrattle: Deal X damage to all enemies</option>
+              <option value="deathrattle_buff_random_friendly">Deathrattle: Give a random friendly minion +X Attack and +X Health</option>
+            </select>
+          </div>
+          <div class="field" id="death-effect-value-row" style="display:none">
+            <label for="f-death-effect-value">Amount</label>
+            <div class="stat-spinner">
+              <button id="death-effect-val-minus">−</button>
+              <input type="number" id="f-death-effect-value" value="2" min="1" max="20" style="width:60px;text-align:center" />
+              <button id="death-effect-val-plus">+</button>
+            </div>
+          </div>
+
+          <!-- Summon VFX preset -->
+          <div class="field">
+            <label for="f-summon-preset">Summon VFX Preset</label>
+            <select id="f-summon-preset" style="width:100%;padding:4px 6px;background:#1e1e2e;color:#e0e0f0;border:1px solid #444;border-radius:4px;font-family:inherit;font-size:13px">
+              <option value="">— Default (faction flash) —</option>
+            </select>
+          </div>
+
+          <!-- Death VFX preset -->
+          <div class="field">
+            <label for="f-death-vfx-preset">Death VFX Preset</label>
+            <select id="f-death-vfx-preset" style="width:100%;padding:4px 6px;background:#1e1e2e;color:#e0e0f0;border:1px solid #444;border-radius:4px;font-family:inherit;font-size:13px">
+              <option value="">— Default (explosion) —</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <legend>Stats</legend>
+          <div class="stats-grid">
+            <div class="stat-field mana">
+              <label>⚡ Rations</label>
+              <div class="stat-spinner">
+                <button data-stat="mana" data-dir="-1">−</button>
+                <input type="number" id="f-mana" value="1" min="0" max="20" />
+                <button data-stat="mana" data-dir="1">+</button>
+              </div>
+            </div>
+            <div class="stat-field attack">
+              <label>⚔ Attack</label>
+              <div class="stat-spinner">
+                <button data-stat="attack" data-dir="-1">−</button>
+                <input type="number" id="f-attack" value="1" min="0" max="20" />
+                <button data-stat="attack" data-dir="1">+</button>
+              </div>
+            </div>
+            <div class="stat-field health">
+              <label>♥ Health</label>
+              <div class="stat-spinner">
+                <button data-stat="health" data-dir="-1">−</button>
+                <input type="number" id="f-health" value="1" min="1" max="30" />
+                <button data-stat="health" data-dir="1">+</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <legend>Card Art</legend>
+          <div class="upload-area" id="upload-area">
+            <input type="file" id="art-input" accept="image/*" />
+            <div class="upload-icon">🖼️</div>
+            <p><strong>Click to upload</strong> or drag & drop</p>
+            <p>PNG, JPG, WEBP supported</p>
+          </div>
+          <div class="img-preview-row">
+            <img id="art-thumb" alt="art preview" />
+            <span id="art-name">No image selected</span>
+            <button id="clear-art">✕ Remove</button>
+          </div>
+        </div>
+
+      </main>
+    </div>
+
+    <!-- ── Collection ── -->
+    <section class="collection-panel">
+      <div class="collection-header">
+        <h2>Collection (<span id="card-count">0</span>)</h2>
+        <div class="collection-actions">
+          <button class="btn btn-outline" id="btn-import">📂 Import JSON</button>
+          <button class="btn btn-purple"  id="btn-export">📤 Export JSON</button>
+          <input type="file" id="import-input" accept=".json" style="display:none" />
+        </div>
+      </div>
+      <div class="card-grid" id="card-grid">
+        <span class="empty-collection">No cards yet — create one above!</span>
+      </div>
+    </section>
+
+    <!-- ── Hand Layout Editor ── -->
+    <section class="hand-layout-panel">
+      <h2>🃏 Hand Layout</h2>
+      <p class="hand-layout-hint">
+        Drag any card left/right to set spacing · drag up/down to set arc · scroll on a card to rotate · scroll on empty space to adjust all angles
+      </p>
+      <canvas id="hand-canvas" width="900" height="240"></canvas>
+      <div class="hand-sliders">
+        <div class="slider-field">
+          <label>Spacing <span id="lbl-spacing">145 px</span></label>
+          <input type="range" id="sl-spacing" min="40" max="200" value="145" />
+        </div>
+        <div class="slider-field">
+          <label>Fan Angle <span id="lbl-angle">6 °</span></label>
+          <input type="range" id="sl-angle" min="0" max="20" step="0.5" value="6" />
+        </div>
+        <div class="slider-field">
+          <label>Arc Drop <span id="lbl-arc">6 px</span></label>
+          <input type="range" id="sl-arc" min="0" max="40" value="6" />
+        </div>
+        <div class="slider-field">
+          <label>Hover Lift <span id="lbl-hover">30 px</span></label>
+          <input type="range" id="sl-hover" min="0" max="80" value="30" />
+        </div>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-primary" id="btn-hand-apply" style="max-width:200px">✓ Set as Default</button>
+        <button class="btn btn-outline"  id="btn-hand-reset"  style="max-width:200px">↺ Reset to Original</button>
+      </div>
+    </section>
+
+    <script type="module" src="/src/editor/main.js"></script>
+
+    <!-- Save toast -->
+    <div id="save-toast" style="
+      position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(20px);
+      background:#16a34a; color:#fff; padding:10px 22px; border-radius:8px;
+      font-size:.9rem; font-weight:600; opacity:0; pointer-events:none;
+      transition:opacity .25s, transform .25s; z-index:9999;
+    ">✔ Card saved!</div>
+  </body>
+</html>

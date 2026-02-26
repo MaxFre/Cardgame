@@ -1,0 +1,61 @@
+{
+  "statLayout": {
+    "hand": {
+      "attack": {
+        "x": 93,
+        "y": 314
+      },
+      "health": {
+        "x": 165,
+        "y": 314
+      },
+      "mana": {
+        "x": 47,
+        "y": 56
+      },
+      "name": {
+        "x": 132,
+        "y": 276
+      },
+      "faction": {
+        "x": 216,
+        "y": 54
+      },
+      "factionIconSize": 103
+    },
+    "field": {
+      "attack": {
+        "x": 101,
+        "y": 276
+      },
+      "health": {
+        "x": 157,
+        "y": 276
+      },
+      "mana": {
+        "x": 82,
+        "y": 38
+      },
+      "name": {
+        "x": 157,
+        "y": 21
+      },
+      "faction": {
+        "x": 131,
+        "y": 80
+      },
+      "factionIconSize": 103
+    }
+  },
+  "fieldCircle": {
+    "cx": 132,
+    "cy": 174,
+    "r": 92
+  },
+  "handArtBox": {
+    "x": 17,
+    "y": 43,
+    "w": 234,
+    "h": 261
+  }
+}
