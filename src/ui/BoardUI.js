@@ -168,12 +168,13 @@ export function init(app) {
       vfx.battlecryBurst(cardView, faction).catch(() => {});
       const meta = EFFECTS_BY_ID[eff.id];
       if (meta?.requiresTarget) {
-        const pool = meta.targetAny
+        const pool = (meta.targetAny
           ? [
               ...playerField._placed.map(p => p.cardView),
               ...opponentField._placed.map(p => p.cardView),
             ]
-          : (meta.targetFriendly ? playerField : opponentField)._placed.map(p => p.cardView);
+          : (meta.targetFriendly ? playerField : opponentField)._placed.map(p => p.cardView)
+        ).filter(cv => cv !== cardView);  // can't target yourself
         if (pool.length > 0) {
           const isPositive = meta.isPositive ?? !!meta.targetFriendly;
           const label = meta.targetLabel ?? (isPositive ? `+${eff.value ?? 1}` : `-${eff.value ?? 1}`);
@@ -205,13 +206,14 @@ export function init(app) {
       const meta = EFFECTS_BY_ID[eff.id];
       let chosenTarget = null;
       if (meta?.requiresTarget) {
-        // Opponent picks a random valid target
-        const pool = meta.targetAny
+        // Opponent picks a random valid target (excluding itself)
+        const pool = (meta.targetAny
           ? [
               ...opponentField._placed.map(p => p.cardView),
               ...playerField._placed.map(p => p.cardView),
             ]
-          : (meta.targetFriendly ? opponentField : playerField)._placed.map(p => p.cardView);
+          : (meta.targetFriendly ? opponentField : playerField)._placed.map(p => p.cardView)
+        ).filter(cv => cv !== cardView);  // can't target yourself
         if (pool.length > 0) chosenTarget = pool[Math.floor(Math.random() * pool.length)];
       }
       if (!meta?.requiresTarget || chosenTarget) {
