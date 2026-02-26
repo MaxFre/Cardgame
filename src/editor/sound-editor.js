@@ -264,11 +264,13 @@ clearAllBtn.addEventListener('click', () => {
 
 // ── Init ──────────────────────────────────────────────────────────────────
 
-await SoundManager.loadAllCustom();
+(async () => {
+  await SoundManager.loadAllCustom();
 
-const grid = document.getElementById('grid');
-for (const key of SOUND_KEYS) {
-  const card = buildSlotCard(key);
-  grid.appendChild(card);
-  wireCard(card);
-}
+  const grid = document.getElementById('grid');
+  for (const key of SOUND_KEYS) {
+    const card = buildSlotCard(key);
+    grid.appendChild(card);
+    wireCard(card);
+  }
+})();
