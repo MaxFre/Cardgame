@@ -1,4 +1,5 @@
 import * as PIXI from 'pixi.js';
+import rationIconUrl from '../assets/onFieldEffects/RationIcon.png';
 
 const MAX_RATIONS = 10;
 
@@ -15,16 +16,14 @@ export class RationsDisplay extends PIXI.Container {
     this._bg = new PIXI.Graphics();
     this.addChild(this._bg);
 
-    // Icon
-    const iconStyle = new PIXI.TextStyle({
-      fontFamily: 'serif',
-      fontSize:   18,
-      fill:       0xfbbf24,
-    });
-    this._icon = new PIXI.Text('⚡', iconStyle);
+    // Icon — RationIcon sprite
+    const rationTex  = PIXI.Texture.from(rationIconUrl);
+    this._icon        = new PIXI.Sprite(rationTex);
     this._icon.anchor.set(0.5);
-    this._icon.x = -28;
-    this._icon.y = 0;
+    this._icon.x      = -28;
+    this._icon.y      = 0;
+    this._icon.width  = 28;
+    this._icon.height = 28;
     this.addChild(this._icon);
 
     // Number label  e.g. "3 / 10"

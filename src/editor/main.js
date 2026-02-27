@@ -1,15 +1,31 @@
-import emptyCardSrc    from '../assets/cards/EmptyCard.png';
-import fieldFrameSrc   from '../assets/cards/OnFieldFrame.png';
+import emptyCardSrc         from '../assets/cards/EmptyCard.png';
+import fieldFrameSrc        from '../assets/cards/OnFieldFrame.png';
+import spellCardEmptyFrameSrc from '../assets/cards/SpellCardEmptyFrame.png';
 import _bundledCollection from '../assets/cards/CreatedCards/collection.json';
 import iconFolkSrc     from '../assets/cards/Icons/FolkIcon.png';
 import iconMagicalSrc  from '../assets/cards/Icons/MagicalIcon.png';
 import iconWildSrc     from '../assets/cards/Icons/WildIcon.png';
+import rationIconSrc   from '../assets/onFieldEffects/RationIcon.png';
 
 // Pre-load faction icons for canvas drawImage
 const FACTION_ICON_IMGS = {};
 [['Folk', iconFolkSrc], ['Magical', iconMagicalSrc], ['Wild', iconWildSrc]].forEach(([k, src]) => {
   const img = new Image(); img.src = src; FACTION_ICON_IMGS[k] = img;
 });
+
+// Pre-load ration icon for the mana-cost slot in the canvas preview
+const RATION_ICON_IMG = new Image();
+RATION_ICON_IMG.src = rationIconSrc;
+RATION_ICON_IMG.onload = () => typeof redraw === 'function' && redraw();
+
+// Replace ⚡ emoji in the Rations stat label with the real icon sprite
+{
+  const manaLabel = document.querySelector('.stat-field.mana label');
+  if (manaLabel) {
+    manaLabel.innerHTML =
+      `<img src="${rationIconSrc}" style="width:18px;height:18px;vertical-align:middle;margin-right:4px;image-rendering:auto"> Rations`;
+  }
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SCALE  = 2;
@@ -24,6 +40,7 @@ const ART = { x: 14, y: 42, w: 228, h: 232 }; // kept for export fallback
 // ── Hand art window (mutable, persisted to layout.json) ─────────────────────────
 const HAND_ART_KEY     = 'card-hand-art-box';
 const HAND_ART_DEFAULT = { x: 14, y: 42, w: 228, h: 232 };
+const SPELL_ART_DEFAULT = { x: 14, y: 42, w: 228, h: 232 };
 
 function loadHandArtBox() {
   return { ...HAND_ART_DEFAULT };
@@ -32,7 +49,13 @@ function saveHandArtBox() {
   _saveLayoutToFile();
 }
 
-let handArtBox = { ...HAND_ART_DEFAULT };
+let handArtBox  = { ...HAND_ART_DEFAULT };
+let spellArtBox = { ...SPELL_ART_DEFAULT };
+
+// Returns the art-window box object that should be used for the current card type.
+function activeArtBox() {
+  return effectiveMode() === 'spell' ? spellArtBox : handArtBox;
+}
 
 // Description position (fixed)
 const DESC_Y = 258;
@@ -41,25 +64,43 @@ const DESC_Y = 258;
 const STAT_LAYOUT_KEY = 'card-stat-layout';
 const MODE_DEFAULTS = {
   hand: {
-    attack:  { x: CX + (-15 * SCALE), y: CY + (46 * SCALE) },
-    health:  { x: CX + ( 14 * SCALE), y: CY + (46 * SCALE) },
-    mana:    { x: 27,  y: 27 },
-    name:    { x: CX,  y: 30 },
-    faction: { x: CX,  y: 62 },
+    attack:      { x: CX + (-15 * SCALE), y: CY + (46 * SCALE) },
+    health:      { x: CX + ( 14 * SCALE), y: CY + (46 * SCALE) },
+    mana:        { x: 27,  y: 27 },
+    rationIcon:  { x: 27,  y: 52 },
+    name:        { x: CX,  y: 30 },
+    faction:     { x: CX,  y: 62 },
     factionIconSize: 56,
+    rationIconSize:  28,
+  },
+  // Spell cards use their own independent positions (hand view, spell frame)
+  spell: {
+    attack:      { x: CX + (-15 * SCALE), y: CY + (46 * SCALE) },
+    health:      { x: CX + ( 14 * SCALE), y: CY + (46 * SCALE) },
+    mana:        { x: 27,  y: 27 },
+    rationIcon:  { x: 27,  y: 52 },
+    name:        { x: CX,  y: 30 },
+    faction:     { x: CX,  y: 62 },
+    factionIconSize: 56,
+    rationIconSize:  28,
   },
   field: {
-    attack:  { x: CX + (-15 * SCALE), y: CY + (46 * SCALE) },
-    health:  { x: CX + ( 14 * SCALE), y: CY + (46 * SCALE) },
-    mana:    { x: 27,  y: 27 },
-    name:    { x: CX,  y: 30 },
-    faction: { x: CX,  y: 62 },
+    attack:      { x: CX + (-15 * SCALE), y: CY + (46 * SCALE) },
+    health:      { x: CX + ( 14 * SCALE), y: CY + (46 * SCALE) },
+    mana:        { x: 27,  y: 27 },
+    rationIcon:  { x: 27,  y: 52 },
+    name:        { x: CX,  y: 30 },
+    faction:     { x: CX,  y: 62 },
     factionIconSize: 56,
+    rationIconSize:  28,
   },
 };
 
 function loadStatLayout() {
-  return structuredClone(MODE_DEFAULTS);
+  const d = structuredClone(MODE_DEFAULTS);
+  // Ensure the 'spell' key always exists (older saved layouts may not have it)
+  if (!d.spell) d.spell = structuredClone(MODE_DEFAULTS.spell);
+  return d;
 }
 
 function saveStatLayout() {
@@ -70,19 +111,24 @@ let layout = loadStatLayout();
 
 // Active position vars — always reference layout[viewMode].* so mutating
 // them (pos.x = ...) automatically updates the saved layout for that mode.
-let ATTACK_POS  = layout.hand.attack;
-let HEALTH_POS  = layout.hand.health;
-let MANA_POS    = layout.hand.mana;
-let NAME_POS    = layout.hand.name;
-let FACTION_POS = layout.hand.faction;
+let ATTACK_POS       = layout.hand.attack;
+let HEALTH_POS       = layout.hand.health;
+let MANA_POS         = layout.hand.mana;
+let RATION_ICON_POS  = layout.hand.rationIcon;
+let NAME_POS         = layout.hand.name;
+let FACTION_POS      = layout.hand.faction;
 
 function syncPosVars() {
-  const m = layout[viewMode];
-  ATTACK_POS  = m.attack;
-  HEALTH_POS  = m.health;
-  MANA_POS    = m.mana;
-  NAME_POS    = m.name;
-  FACTION_POS = m.faction;
+  const eMode = effectiveMode();
+  // Ensure the spell sub-object exists even if loaded from an old layout.json
+  if (!layout.spell) layout.spell = structuredClone(MODE_DEFAULTS.spell);
+  const m = layout[eMode];
+  ATTACK_POS      = m.attack;
+  HEALTH_POS      = m.health;
+  MANA_POS        = m.mana;
+  RATION_ICON_POS = m.rationIcon ?? (m.rationIcon = { ...MODE_DEFAULTS.hand.rationIcon });
+  NAME_POS        = m.name;
+  FACTION_POS     = m.faction;
 }
 
 // ── Field circle window (draggable, saved globally) ───────────────────────────
@@ -108,6 +154,7 @@ function _saveLayoutToFile() {
     statLayout:      layout,
     fieldCircle:     fieldCircle,
     handArtBox:      handArtBox,
+    spellArtBox:     spellArtBox,
     ...(hlCfg      ? { handLayoutConfig: hlCfg }     : {}),
     ...(glowColors ? { glowColors }                  : {}),
     ...(glowInset  !== 0   ? { glowInset }            : {}),
@@ -131,9 +178,18 @@ const RARITY_COLORS = {
 // ── State ──────────────────────────────────────────────────────────────────────
 let cardFrame      = null;   // HTMLImageElement – EmptyCard.png (hand)
 let cardFieldFrame = null;   // HTMLImageElement – OnFieldFrame.png (field)
+let cardSpellFrame = null;   // HTMLImageElement – SpellCardEmptyFrame.png (spell hand)
 let artImage       = null;   // HTMLImageElement – user-uploaded art
 let isDirty        = false;
 let viewMode       = 'hand'; // 'hand' | 'field'
+
+// Returns the layout key to use for positions/sizes.
+// When editing a spell card in hand view, positions are stored under 'spell'
+// so they can differ from minion-hand positions.
+function effectiveMode() {
+  if (viewMode === 'hand' && currentCard?.type === 'spell') return 'spell';
+  return viewMode;
+}
 
 // Art pan/zoom (in canvas-pixel space) — always reflects the active view mode
 let artOffset = { x: 0, y: 0 };
@@ -175,6 +231,11 @@ cardFieldFrame.onload  = () => redraw();
 cardFieldFrame.onerror = () => console.warn('Could not load OnFieldFrame.png');
 cardFieldFrame.src     = fieldFrameSrc;
 
+cardSpellFrame = new Image();
+cardSpellFrame.onload  = () => redraw();
+cardSpellFrame.onerror = () => console.warn('Could not load SpellCardEmptyFrame.png');
+cardSpellFrame.src     = spellCardEmptyFrameSrc;
+
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const canvas      = document.getElementById('card-canvas');
 const ctx         = canvas.getContext('2d');
@@ -208,8 +269,10 @@ const fDeathVfxPreset  = document.getElementById('f-death-vfx-preset');
     }
   } catch {}
 })();
-const iconSizeSlider = document.getElementById('icon-size-slider');
-const iconSizeVal    = document.getElementById('icon-size-val');
+const iconSizeSlider        = document.getElementById('icon-size-slider');
+const iconSizeVal           = document.getElementById('icon-size-val');
+const rationIconSizeSlider  = document.getElementById('ration-icon-size-slider');
+const rationIconSizeVal     = document.getElementById('ration-icon-size-val');
 
 const artInput    = document.getElementById('art-input');
 const artThumb    = document.getElementById('art-thumb');
@@ -245,11 +308,12 @@ function isOverArt(cx, cy) {
     const dx = px - fieldCircle.cx, dy = py - fieldCircle.cy;
     return dx * dx + dy * dy <= fieldCircle.r * fieldCircle.r;
   }
-  return px >= handArtBox.x && px <= handArtBox.x + handArtBox.w &&
-         py >= handArtBox.y && py <= handArtBox.y + handArtBox.h;
+  const ab = activeArtBox();
+  return px >= ab.x && px <= ab.x + ab.w &&
+         py >= ab.y && py <= ab.y + ab.h;
 }
 
-// Returns 'attack' | 'health' | 'mana' | 'name' | null
+// Returns 'attack' | 'health' | 'mana' | 'rationIcon' | 'name' | null
 const STAT_HIT_R  = 18;
 const NAME_HIT_HW = 90;
 const NAME_HIT_HH = 14;
@@ -257,19 +321,29 @@ const FACTION_HIT_HW = 50;
 const FACTION_HIT_HH = 16;
 function statAtPoint(cx, cy) {
   const { px, py } = canvasToPixel(cx, cy);
-  if (viewMode === 'hand') {
+  const eMode = effectiveMode();
+  const isSpell = currentCard.type === 'spell';
+  if (eMode !== 'field') {
+    // Name is always draggable in hand/spell view
     if (Math.abs(px - NAME_POS.x) <= NAME_HIT_HW && Math.abs(py - NAME_POS.y) <= NAME_HIT_HH) return 'name';
-    if (Math.abs(px - FACTION_POS.x) <= FACTION_HIT_HW && Math.abs(py - FACTION_POS.y) <= FACTION_HIT_HH) return 'faction';
+    // Faction only for minions (hidden on spell cards)
+    if (!isSpell && Math.abs(px - FACTION_POS.x) <= FACTION_HIT_HW && Math.abs(py - FACTION_POS.y) <= FACTION_HIT_HH) return 'faction';
     const dm = { x: MANA_POS.x - px, y: MANA_POS.y - py };
     if (dm.x * dm.x + dm.y * dm.y <= STAT_HIT_R * STAT_HIT_R) return 'mana';
+    const riSz = (layout[eMode]?.rationIconSize ?? 28) / 2 + 4;
+    const dri = { x: RATION_ICON_POS.x - px, y: RATION_ICON_POS.y - py };
+    if (dri.x * dri.x + dri.y * dri.y <= riSz * riSz) return 'rationIcon';
   }
   if (viewMode === 'field') {
     if (Math.abs(px - FACTION_POS.x) <= FACTION_HIT_HW && Math.abs(py - FACTION_POS.y) <= FACTION_HIT_HH) return 'faction';
   }
-  const slots = { attack: ATTACK_POS, health: HEALTH_POS };
-  for (const [key, pos] of Object.entries(slots)) {
-    const dx = px - pos.x, dy = py - pos.y;
-    if (dx * dx + dy * dy <= STAT_HIT_R * STAT_HIT_R) return key;
+  // Attack / health only for non-spell cards
+  if (!isSpell) {
+    const slots = { attack: ATTACK_POS, health: HEALTH_POS };
+    for (const [key, pos] of Object.entries(slots)) {
+      const dx = px - pos.x, dy = py - pos.y;
+      if (dx * dx + dy * dy <= STAT_HIT_R * STAT_HIT_R) return key;
+    }
   }
   return null;
 }
@@ -291,12 +365,13 @@ const RECT_HANDLE_R = 14;
 function rectHandleAtPoint(cx, cy) {
   if (viewMode !== 'hand') return null;
   const { px, py } = canvasToPixel(cx, cy);
+  const ab = activeArtBox();
   // Bottom-right corner resize dot
-  const brx = handArtBox.x + handArtBox.w, bry = handArtBox.y + handArtBox.h;
+  const brx = ab.x + ab.w, bry = ab.y + ab.h;
   const cdx = px - brx, cdy = py - bry;
   if (cdx * cdx + cdy * cdy <= RECT_HANDLE_R * RECT_HANDLE_R) return 'corner';
   // Center move crosshair
-  const midx = handArtBox.x + handArtBox.w / 2, midy = handArtBox.y + handArtBox.h / 2;
+  const midx = ab.x + ab.w / 2, midy = ab.y + ab.h / 2;
   const mdx = px - midx, mdy = py - midy;
   if (mdx * mdx + mdy * mdy <= RECT_HANDLE_R * RECT_HANDLE_R) return 'center';
   return null;
@@ -319,12 +394,13 @@ canvas.addEventListener('mousemove', e => {
   if (handArtDrag) {
     const { px, py } = canvasToPixel(e.offsetX, e.offsetY);
     const dx = px - handArtDrag.startPx, dy = py - handArtDrag.startPy;
+    const ab = activeArtBox();
     if (handArtDrag.type === 'center') {
-      handArtBox.x = Math.round(handArtDrag.baseX + dx);
-      handArtBox.y = Math.round(handArtDrag.baseY + dy);
+      ab.x = Math.round(handArtDrag.baseX + dx);
+      ab.y = Math.round(handArtDrag.baseY + dy);
     } else {
-      handArtBox.w = Math.max(20, Math.round(handArtDrag.baseW + dx));
-      handArtBox.h = Math.max(20, Math.round(handArtDrag.baseH + dy));
+      ab.w = Math.max(20, Math.round(handArtDrag.baseW + dx));
+      ab.h = Math.max(20, Math.round(handArtDrag.baseH + dy));
     }
     redraw();
     return;
@@ -344,10 +420,11 @@ canvas.addEventListener('mousemove', e => {
     const { px, py } = canvasToPixel(e.offsetX, e.offsetY);
     const { px: sx, py: sy } = canvasToPixel(statDrag.startX, statDrag.startY);
     const nx = statDrag.basePosX + (px - sx), ny = statDrag.basePosY + (py - sy);
-    const tgt = statDrag.stat === 'attack'  ? ATTACK_POS
-               : statDrag.stat === 'health'  ? HEALTH_POS
-               : statDrag.stat === 'mana'    ? MANA_POS
-               : statDrag.stat === 'faction' ? FACTION_POS : NAME_POS;
+    const tgt = statDrag.stat === 'attack'      ? ATTACK_POS
+               : statDrag.stat === 'health'      ? HEALTH_POS
+               : statDrag.stat === 'mana'        ? MANA_POS
+               : statDrag.stat === 'rationIcon'  ? RATION_ICON_POS
+               : statDrag.stat === 'faction'     ? FACTION_POS : NAME_POS;
     tgt.x = nx; tgt.y = ny;
     redraw();
     return;
@@ -373,9 +450,10 @@ canvas.addEventListener('mousedown', e => {
   if (rh) {
     e.preventDefault();
     const { px, py } = canvasToPixel(e.offsetX, e.offsetY);
+    const ab = activeArtBox();
     handArtDrag = { type: rh, startPx: px, startPy: py,
-                    baseX: handArtBox.x, baseY: handArtBox.y,
-                    baseW: handArtBox.w, baseH: handArtBox.h };
+                    baseX: ab.x, baseY: ab.y,
+                    baseW: ab.w, baseH: ab.h };
     canvas.style.cursor = rh === 'center' ? 'move' : 'nwse-resize';
     return;
   }
@@ -392,10 +470,11 @@ canvas.addEventListener('mousedown', e => {
   const stat = statAtPoint(e.offsetX, e.offsetY);
   if (stat) {
     e.preventDefault();
-    const pos = stat === 'attack'  ? ATTACK_POS
-             : stat === 'health'  ? HEALTH_POS
-             : stat === 'mana'    ? MANA_POS
-             : stat === 'faction' ? FACTION_POS : NAME_POS;
+    const pos = stat === 'attack'     ? ATTACK_POS
+             : stat === 'health'     ? HEALTH_POS
+             : stat === 'mana'       ? MANA_POS
+             : stat === 'rationIcon' ? RATION_ICON_POS
+             : stat === 'faction'    ? FACTION_POS : NAME_POS;
     statDrag = { stat, startX: e.offsetX, startY: e.offsetY, basePosX: pos.x, basePosY: pos.y };
     canvas.style.cursor = 'grabbing';
     return;
@@ -415,12 +494,14 @@ window.addEventListener('mouseup', () => {
 
 // ── Reset stat positions ──────────────────────────────────────────────────────
 document.getElementById('btn-reset-stats').addEventListener('click', () => {
-  const d = structuredClone(MODE_DEFAULTS[viewMode]);
-  Object.assign(ATTACK_POS,  d.attack);
-  Object.assign(HEALTH_POS,  d.health);
-  Object.assign(MANA_POS,    d.mana);
-  Object.assign(NAME_POS,    d.name);
-  Object.assign(FACTION_POS, d.faction);
+  const eMode = effectiveMode();
+  const d = structuredClone(MODE_DEFAULTS[eMode] ?? MODE_DEFAULTS.hand);
+  Object.assign(ATTACK_POS,      d.attack);
+  Object.assign(HEALTH_POS,      d.health);
+  Object.assign(MANA_POS,        d.mana);
+  Object.assign(RATION_ICON_POS, d.rationIcon ?? MODE_DEFAULTS.hand.rationIcon);
+  Object.assign(NAME_POS,        d.name);
+  Object.assign(FACTION_POS,     d.faction);
   saveStatLayout();
   redraw();
 });
@@ -432,7 +513,11 @@ btnResetCircle.addEventListener('click', () => {
 });
 
 btnResetHandArt.addEventListener('click', () => {
-  handArtBox = { ...HAND_ART_DEFAULT };
+  if (effectiveMode() === 'spell') {
+    spellArtBox = { ...SPELL_ART_DEFAULT };
+  } else {
+    handArtBox = { ...HAND_ART_DEFAULT };
+  }
   saveHandArtBox();
   redraw();
 });
@@ -527,14 +612,15 @@ function redraw() {
       const imgY = (cy - r) + (dh - imgH) / 2 + artOffset.y;
       ctx.drawImage(artImage, imgX, imgY, imgW, imgH);
     } else {
-      roundRectPath(ctx, handArtBox.x, handArtBox.y, handArtBox.w, handArtBox.h, 4);
+      roundRectPath(ctx, activeArtBox().x, activeArtBox().y, activeArtBox().w, activeArtBox().h, 4);
       ctx.clip();
-      const baseScale  = Math.max(handArtBox.w / artImage.naturalWidth, handArtBox.h / artImage.naturalHeight);
+      const ab = activeArtBox();
+      const baseScale  = Math.max(ab.w / artImage.naturalWidth, ab.h / artImage.naturalHeight);
       const totalScale = baseScale * artZoom;
       const imgW = artImage.naturalWidth  * totalScale;
       const imgH = artImage.naturalHeight * totalScale;
-      const imgX = handArtBox.x + (handArtBox.w - imgW) / 2 + artOffset.x;
-      const imgY = handArtBox.y + (handArtBox.h - imgH) / 2 + artOffset.y;
+      const imgX = ab.x + (ab.w - imgW) / 2 + artOffset.x;
+      const imgY = ab.y + (ab.h - imgH) / 2 + artOffset.y;
       ctx.drawImage(artImage, imgX, imgY, imgW, imgH);
     }
 
@@ -542,7 +628,8 @@ function redraw() {
   }
 
   // 2. Card frame on top – EmptyCard.png (hand) or OnFieldFrame.png (field)
-  const activeFrame = viewMode === 'field' ? cardFieldFrame : cardFrame;
+  const activeFrame = viewMode === 'field' ? cardFieldFrame
+    : (currentCard.type === 'spell' ? cardSpellFrame : cardFrame);
 
   // For field mode: glow goes BEHIND the frame (between art and frame layer).
   // For hand mode: glow goes ON TOP of the frame.
@@ -598,7 +685,7 @@ function redraw() {
 
   // 2.6 Hand art window drag handles (hand mode only)
   if (viewMode === 'hand') {
-    const { x, y, w, h } = handArtBox;
+    const { x, y, w, h } = activeArtBox();
     const midx = x + w / 2, midy = y + h / 2;
     ctx.save();
     // Dashed guide rect
@@ -643,10 +730,10 @@ function redraw() {
       ctx.textAlign    = 'center';
       ctx.textBaseline = 'middle';
       let fontSize = 26;
-      ctx.font = `bold ${fontSize}px Georgia, serif`;
+      ctx.font = `bold ${fontSize}px 'Cinzel', serif`;
       while (ctx.measureText(currentCard.name).width > maxW && fontSize > 11) {
         fontSize--;
-        ctx.font = `bold ${fontSize}px Georgia, serif`;
+        ctx.font = `bold ${fontSize}px 'Cinzel', serif`;
       }
       ctx.strokeStyle   = 'rgba(0,0,0,0.95)';
       ctx.lineWidth     = 4;
@@ -669,15 +756,16 @@ function redraw() {
   }
 
   // 5. Stat numbers + drag-handle indicators
+  const _isSpellCard = currentCard.type === 'spell';
   const statSlots = viewMode === 'field'
     ? [
         { key: 'attack', pos: ATTACK_POS, label: String(currentCard.attack),   color: '#f97316' },
         { key: 'health', pos: HEALTH_POS, label: String(currentCard.health),   color: '#ef4444' },
       ]
+    : _isSpellCard ? []
     : [
         { key: 'attack', pos: ATTACK_POS, label: String(currentCard.attack),   color: '#f97316' },
         { key: 'health', pos: HEALTH_POS, label: String(currentCard.health),   color: '#ef4444' },
-        { key: 'mana',   pos: MANA_POS,   label: String(currentCard.manaCost), color: '#60a5fa' },
       ];
   for (const s of statSlots) {
     // Dashed ring indicator
@@ -693,6 +781,30 @@ function redraw() {
     drawStat(ctx, s.label, s.pos.x, s.pos.y, s.color);
   }
 
+  // Ration icon — drawn separately at its own draggable position (hand/spell view only)
+  if (viewMode === 'hand') {
+    const riSz = layout[effectiveMode()].rationIconSize ?? 28;
+    const riHitR = riSz / 2 + 4;
+    // Dashed drag-handle ring
+    ctx.save();
+    ctx.strokeStyle = '#a78bfa';
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth   = 1.5;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.arc(RATION_ICON_POS.x, RATION_ICON_POS.y, riHitR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    if (RATION_ICON_IMG.complete && RATION_ICON_IMG.naturalWidth > 0) {
+      ctx.drawImage(RATION_ICON_IMG,
+        RATION_ICON_POS.x - riSz / 2, RATION_ICON_POS.y - riSz / 2, riSz, riSz);
+    } else {
+      RATION_ICON_IMG.onload = () => redraw();
+    }
+    // Mana cost number drawn centred on the ration icon
+    drawStat(ctx, String(currentCard.manaCost), RATION_ICON_POS.x, RATION_ICON_POS.y, '#60a5fa');
+  }
+
   // 6. Rarity dot – follows the name position (hand only)
   if (viewMode === 'hand') {
     const rc = RARITY_COLORS[currentCard.rarity] || '#9ca3af';
@@ -705,23 +817,25 @@ function redraw() {
     ctx.fill();
     ctx.restore();
 
-    // 6b. Faction icon — replaces text pill (draggable)
-    const ICON_SIZE_H = layout[viewMode].factionIconSize ?? 40;
-    // Drag-hint dashed ring
-    ctx.save();
-    ctx.strokeStyle = '#c084fc';
-    ctx.globalAlpha = 0.5;
-    ctx.lineWidth   = 1.5;
-    ctx.setLineDash([3, 3]);
-    ctx.beginPath();
-    ctx.arc(FACTION_POS.x, FACTION_POS.y, ICON_SIZE_H / 2 + 4, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-    const fIconH = FACTION_ICON_IMGS[currentCard.faction] ?? FACTION_ICON_IMGS['Folk'];
-    if (fIconH && fIconH.complete && fIconH.naturalWidth > 0) {
-      ctx.drawImage(fIconH, FACTION_POS.x - ICON_SIZE_H / 2, FACTION_POS.y - ICON_SIZE_H / 2, ICON_SIZE_H, ICON_SIZE_H);
-    } else if (fIconH) {
-      fIconH.onload = () => redraw();
+    // 6b. Faction icon — hidden for spell cards (they have no faction)
+    if (!_isSpellCard) {
+      const ICON_SIZE_H = layout[effectiveMode()].factionIconSize ?? 40;
+      // Drag-hint dashed ring
+      ctx.save();
+      ctx.strokeStyle = '#c084fc';
+      ctx.globalAlpha = 0.5;
+      ctx.lineWidth   = 1.5;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.arc(FACTION_POS.x, FACTION_POS.y, ICON_SIZE_H / 2 + 4, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      const fIconH = FACTION_ICON_IMGS[currentCard.faction] ?? FACTION_ICON_IMGS['Folk'];
+      if (fIconH && fIconH.complete && fIconH.naturalWidth > 0) {
+        ctx.drawImage(fIconH, FACTION_POS.x - ICON_SIZE_H / 2, FACTION_POS.y - ICON_SIZE_H / 2, ICON_SIZE_H, ICON_SIZE_H);
+      } else if (fIconH) {
+        fIconH.onload = () => redraw();
+      }
     }
   }
 
@@ -749,7 +863,7 @@ function redraw() {
 
 function drawStat(ctx, text, x, y, glowColor = '#ffffff') {
   ctx.save();
-  ctx.font          = "bold 28px 'Impact', 'Arial Black', sans-serif";
+  ctx.font          = "bold 28px 'Cinzel', serif";
   ctx.textAlign     = 'center';
   ctx.textBaseline  = 'middle';
   ctx.lineJoin      = 'round';
@@ -856,10 +970,10 @@ function coverFit(srcW, srcH, dstW, dstH) {
 
 function drawFittedText(ctx, text, x, y, maxW) {
   let size = 17;
-  ctx.font = `bold ${size}px Georgia, serif`;
+  ctx.font = `bold ${size}px 'Cinzel', serif`;
   while (ctx.measureText(text).width > maxW && size > 8) {
     size--;
-    ctx.font = `bold ${size}px Georgia, serif`;
+    ctx.font = `bold ${size}px 'Cinzel', serif`;
   }
   ctx.fillText(text, x, y);
 }
@@ -895,22 +1009,24 @@ function renderThumbCanvas(cardData, artImg) {
   // 1. Art (correctly save → clip → draw → restore)
   if (artImg) {
     tctx.save();
-    roundRectPath(tctx, handArtBox.x, handArtBox.y, handArtBox.w, handArtBox.h, 4);
+    const ab = cardData.type === 'spell' ? spellArtBox : handArtBox;
+    roundRectPath(tctx, ab.x, ab.y, ab.w, ab.h, 4);
     tctx.clip();
     const off   = cardData.artOffset ?? { x: 0, y: 0 };
     const zoom  = cardData.artZoom   ?? 1;
-    const base  = Math.max(handArtBox.w / artImg.naturalWidth, handArtBox.h / artImg.naturalHeight);
+    const base  = Math.max(ab.w / artImg.naturalWidth, ab.h / artImg.naturalHeight);
     const total = base * zoom;
     const imgW  = artImg.naturalWidth  * total;
     const imgH  = artImg.naturalHeight * total;
-    const imgX  = handArtBox.x + (handArtBox.w - imgW) / 2 + off.x;
-    const imgY  = handArtBox.y + (handArtBox.h - imgH) / 2 + off.y;
+    const imgX  = ab.x + (ab.w - imgW) / 2 + off.x;
+    const imgY  = ab.y + (ab.h - imgH) / 2 + off.y;
     tctx.drawImage(artImg, imgX, imgY, imgW, imgH);
     tctx.restore();
   }
 
   // 2. Card frame
-  if (cardFrame) tctx.drawImage(cardFrame, 0, 0, W, H);
+  const _thumb_frame = cardData.type === 'spell' ? cardSpellFrame : cardFrame;
+  if (_thumb_frame) tctx.drawImage(_thumb_frame, 0, 0, W, H);
 
   // 3. Gold name at top
   if (cardData.name) {
@@ -918,10 +1034,10 @@ function renderThumbCanvas(cardData, artImg) {
     tctx.textAlign    = 'center';
     tctx.textBaseline = 'middle';
     let sz = 18;
-    tctx.font = `bold ${sz}px Georgia, serif`;
+    tctx.font = `bold ${sz}px 'Cinzel', serif`;
     while (tctx.measureText(cardData.name).width > 190 && sz > 9) {
       sz--;
-      tctx.font = `bold ${sz}px Georgia, serif`;
+      tctx.font = `bold ${sz}px 'Cinzel', serif`;
     }
     tctx.strokeStyle  = 'rgba(0,0,0,0.95)';
     tctx.lineWidth    = 3;
@@ -948,7 +1064,7 @@ function renderThumbCanvas(cardData, artImg) {
 
 function drawStatOnCtx(c, text, x, y, glowColor = '#ffffff') {
   c.save();
-  c.font          = "bold 22px 'Impact', 'Arial Black', sans-serif";
+  c.font          = "bold 22px 'Cinzel', serif";
   c.textAlign     = 'center';
   c.textBaseline  = 'middle';
   c.lineJoin      = 'round';
@@ -1016,6 +1132,7 @@ function populateForm(card) {
   setActiveType(card.type ?? 'minion');
   setActiveRarity(card.rarity ?? 'common');
   setActiveFaction(card.faction ?? 'Folk');
+  syncPosVars();      // switch position pointers to correct layout (spell vs minion)
   syncIconSizeSlider();
 }
 
@@ -1081,7 +1198,10 @@ document.getElementById('type-row').addEventListener('click', e => {
   if (!btn) return;
   setActiveType(btn.dataset.type);
   currentCard.type = btn.dataset.type;
+  syncPosVars();
+  syncIconSizeSlider();
   markDirty();
+  redraw();
 });
 
 function setActiveType(type) {
@@ -1122,20 +1242,32 @@ function setActiveFaction(faction) {
   });
 }
 
-// Icon size slider
+// Faction icon size slider — sets size for the current effective mode
 iconSizeSlider.addEventListener('input', () => {
   const v = Number(iconSizeSlider.value);
   iconSizeVal.textContent = v;
-  layout.hand.factionIconSize  = v;
-  layout.field.factionIconSize = v;
+  layout[effectiveMode()].factionIconSize = v;
+  saveStatLayout();
+  redraw();
+});
+
+// Ration icon size slider — sets size for the current effective mode
+rationIconSizeSlider.addEventListener('input', () => {
+  const v = Number(rationIconSizeSlider.value);
+  rationIconSizeVal.textContent = v;
+  layout[effectiveMode()].rationIconSize = v;
   saveStatLayout();
   redraw();
 });
 
 function syncIconSizeSlider() {
-  const v = layout[viewMode]?.factionIconSize ?? 40;
+  const eMode = effectiveMode();
+  const v = layout[eMode]?.factionIconSize ?? 40;
   iconSizeSlider.value    = v;
   iconSizeVal.textContent = v;
+  const rv = layout[eMode]?.rationIconSize ?? 28;
+  rationIconSizeSlider.value    = rv;
+  rationIconSizeVal.textContent = rv;
 }
 
 // ── Image upload ──────────────────────────────────────────────────────────────
@@ -1505,21 +1637,24 @@ redraw();
     if (data.statLayout) {
       const load = (mode) => {
         const src = data.statLayout[mode] ?? {};
-        const def = MODE_DEFAULTS[mode];
+        const def = MODE_DEFAULTS[mode] ?? MODE_DEFAULTS.hand;
         return {
           attack:  src.attack  ?? { ...def.attack  },
           health:  src.health  ?? { ...def.health  },
           mana:    src.mana    ?? { ...def.mana    },
           name:    src.name    ?? { ...def.name    },
           faction: src.faction ?? { ...def.faction },
+          rationIcon: src.rationIcon ?? { ...def.rationIcon },
           factionIconSize: src.factionIconSize ?? def.factionIconSize,
+          rationIconSize:  src.rationIconSize  ?? def.rationIconSize,
         };
       };
-      layout = { hand: load('hand'), field: load('field') };
+      layout = { hand: load('hand'), field: load('field'), spell: load('spell') };
       syncPosVars();
     }
     if (data.fieldCircle) Object.assign(fieldCircle, data.fieldCircle);
     if (data.handArtBox)  Object.assign(handArtBox,  data.handArtBox);
+    if (data.spellArtBox) Object.assign(spellArtBox, data.spellArtBox);
     if (data.handLayoutConfig) { hlCfg = data.handLayoutConfig; if (_syncHandLayoutUI) _syncHandLayoutUI(); }
     if (data.glowColors)  { glowColors = data.glowColors; }
     if (typeof data.glowInset === 'number') glowInset = data.glowInset;

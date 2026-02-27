@@ -1,6 +1,7 @@
 import * as PIXI from 'pixi.js';
 import cardSrc         from '../assets/cards/EmptyCard.png';
 import fieldFrameSrc   from '../assets/cards/OnFieldFrame.png';
+import spellCardSrc    from '../assets/cards/SpellCardEmptyFrame.png';
 import cardBackSrc     from '../assets/cards/CardBack.png';
 import iconFolkSrc     from '../assets/cards/Icons/FolkIcon.png';
 import iconMagicalSrc  from '../assets/cards/Icons/MagicalIcon.png';
@@ -9,12 +10,17 @@ import iconWildSrc     from '../assets/cards/Icons/WildIcon.png';
 export const CARD_W = 128;
 export const CARD_H = 192;
 
-// Stat label offsets from card centre — hand view
+// Stat label offsets from card centre — hand view (minion cards)
 export let ATTACK_OFFSET       = { x: -15, y: 46 };
 export let HEALTH_OFFSET       = { x:  14, y: 46 };
 export let NAME_OFFSET         = { x:   0, y: -81 };
 export let MANA_OFFSET         = { x: -50, y: -83 };
 export let FACTION_OFFSET      = { x:   0, y: -65 };
+
+// Stat label offsets specifically for spell cards in hand view.
+// Independent from minion offsets so the editor can position them separately.
+export let SPELL_NAME_OFFSET   = { x:   0, y: -81 };
+export let SPELL_MANA_OFFSET   = { x: -50, y: -83 };
 // Stat label offsets from card centre — field view (defaults same, overridden by editor layout)
 export let FIELD_ATTACK_OFFSET  = { x: -15, y: 46 };
 export let FIELD_HEALTH_OFFSET  = { x:  14, y: 46 };
@@ -22,10 +28,9 @@ export let FIELD_FACTION_OFFSET = { x:   0, y: -65 };
 
 // Art window in game-scale coords (relative to top-left of card)
 // Mutable so main.js can apply the saved hand-art-box from the editor
-export const HAND_ART_BOX = { x: 7, y: 21, w: 114, h: 116 };
 // Helpers that read the box at call-time
-function artCX() { return HAND_ART_BOX.x + HAND_ART_BOX.w / 2 - CARD_W / 2; }
-function artCY() { return HAND_ART_BOX.y + HAND_ART_BOX.h / 2 - CARD_H / 2; }
+function artCX(box) { return box.x + box.w / 2 - CARD_W / 2; }
+function artCY(box) { return box.y + box.h / 2 - CARD_H / 2; }
 
 // Circle mask constants for field frame (game scale 128×192, relative to anchor 0.5)
 // PNG circle at 1024×1536: cx=512, cy=624, r=354  →  ÷4 at 256×384 editor → cx=128, cy=156, r=89  →  ÷2 game scale
@@ -35,8 +40,14 @@ export const FIELD_CIRCLE = { cx: 0, cy: -18, r: 44 };
 // Faction icon size (game scale). Mutated by main.js from saved editor value.
 export const FACTION_ICON_CFG = { size: 28 };
 
+// Separate art-window boxes for minion cards and spell cards (hand mode).
+// main.js mutates these after loading layout.json.
+export const HAND_ART_BOX  = { x: 7, y: 21, w: 114, h: 116 };
+export const SPELL_ART_BOX = { x: 7, y: 21, w: 114, h: 116 };
+
 // Glow config — populated by configureGlow() called from main.js after loading layout.json
 let _glowConfig = { highlight: 0xffd700, buff: 0x22ee66, damage: 0xff3333, inset: 0, width: 1 };
+
 export function configureGlow(colors, inset, width) {
   const hex = s => parseInt((s || '').replace('#', ''), 16);
   _glowConfig = {
@@ -49,6 +60,7 @@ export function configureGlow(colors, inset, width) {
 }
 
 const cardTexture       = PIXI.Texture.from(cardSrc);
+const spellCardTexture  = PIXI.Texture.from(spellCardSrc);
 const fieldFrameTexture = PIXI.Texture.from(fieldFrameSrc);
 const backTexture       = PIXI.Texture.from(cardBackSrc);
 
@@ -69,9 +81,13 @@ export class CardView extends PIXI.Container {
       artContainer.zIndex = 0;
       this._artContainer = artContainer;
 
+      // Choose art box based on card type
+      const _isSpell = this.card.type === 'spell';
+      const artBox = _isSpell ? SPELL_ART_BOX : HAND_ART_BOX;
+
       const mask = new PIXI.Graphics();
       mask.beginFill(0xffffff);
-      mask.drawRect(HAND_ART_BOX.x - CARD_W / 2, HAND_ART_BOX.y - CARD_H / 2, HAND_ART_BOX.w, HAND_ART_BOX.h);
+      mask.drawRect(artBox.x - CARD_W / 2, artBox.y - CARD_H / 2, artBox.w, artBox.h);
       mask.endFill();
       artContainer.mask = mask;
       artContainer.addChild(mask);
@@ -89,7 +105,7 @@ export class CardView extends PIXI.Container {
       // Solid background so transparent pixels in the art don't show the board through
       const artBg = new PIXI.Graphics();
       artBg.beginFill(0x111111, 1);
-      artBg.drawRect(HAND_ART_BOX.x - CARD_W / 2, HAND_ART_BOX.y - CARD_H / 2, HAND_ART_BOX.w, HAND_ART_BOX.h);
+      artBg.drawRect(artBox.x - CARD_W / 2, artBox.y - CARD_H / 2, artBox.w, artBox.h);
       artBg.endFill();
       artContainer.addChild(artBg);
       this._artBg = artBg;
@@ -106,7 +122,10 @@ export class CardView extends PIXI.Container {
     }
 
     // ── Card frame ────────────────────────────────────────────────────────────
-    this._sprite = new PIXI.Sprite(cardTexture);
+    // Spell cards use SpellCardEmptyFrame; minions use EmptyCard
+    const _isSpell     = this.card.type === 'spell';
+    const _handTexture = _isSpell ? spellCardTexture : cardTexture;
+    this._sprite = new PIXI.Sprite(_handTexture);
     this._sprite.anchor.set(0.5);
     this._sprite.zIndex = 1;
 
@@ -116,19 +135,19 @@ export class CardView extends PIXI.Container {
       this._sprite.width  = CARD_W;
       this._sprite.height = CARD_H;
     };
-    if (cardTexture.baseTexture.valid) {
+    if (_handTexture.baseTexture.valid) {
       applySize();
     } else {
-      cardTexture.baseTexture.once('loaded', applySize);
+      _handTexture.baseTexture.once('loaded', applySize);
     }
 
     this.addChild(this._sprite);
 
     // ── Stat labels ───────────────────────────────────────────────────────────
     const baseStatStyle = {
-      fontFamily:      '"Impact", "Arial Black", sans-serif',
+      fontFamily:      '"Cinzel", serif',
       fontSize:        14,   // editor 28px ÷ 2
-      fontWeight:      'bold',
+      fontWeight:      '700',
       fill:            0xffffff,
       stroke:          0x000000,
       strokeThickness: 3,   // editor 5 ÷ 2
@@ -143,9 +162,9 @@ export class CardView extends PIXI.Container {
 
     // Name label — Georgia serif, gold gradient fill (matches editor)
     const nameStyle = new PIXI.TextStyle({
-      fontFamily:       'Georgia, serif',
-      fontSize:         13,   // editor 26px ÷ 2
-      fontWeight:       'bold',
+      fontFamily:       '"Cinzel", serif',
+      fontSize:         12,   // editor 24px ÷ 2
+      fontWeight:       '700',
       fill:             [0xffe98a, 0xffd700, 0xc8860a],
       fillGradientType: PIXI.TEXT_GRADIENT.LINEAR_VERTICAL,
       stroke:           0x000000,
@@ -162,16 +181,16 @@ export class CardView extends PIXI.Container {
     });
     this._nameLabel = new PIXI.Text(this.card.name || '', nameStyle);
     this._nameLabel.anchor.set(0.5);
-    this._nameLabel.x      = NAME_OFFSET.x;
-    this._nameLabel.y      = NAME_OFFSET.y;
+    this._nameLabel.x      = _isSpell ? SPELL_NAME_OFFSET.x : NAME_OFFSET.x;
+    this._nameLabel.y      = _isSpell ? SPELL_NAME_OFFSET.y : NAME_OFFSET.y;
     this._nameLabel.zIndex = 2;
     this.addChild(this._nameLabel);
 
     // Mana label
     this._manaLabel = new PIXI.Text(String(this.card.manaCost ?? 0), manaStyle);
     this._manaLabel.anchor.set(0.5);
-    this._manaLabel.x      = MANA_OFFSET.x;
-    this._manaLabel.y      = MANA_OFFSET.y;
+    this._manaLabel.x      = _isSpell ? SPELL_MANA_OFFSET.x : MANA_OFFSET.x;
+    this._manaLabel.y      = _isSpell ? SPELL_MANA_OFFSET.y : MANA_OFFSET.y;
     this._manaLabel.zIndex = 2;
     this.addChild(this._manaLabel);
 
@@ -253,13 +272,14 @@ export class CardView extends PIXI.Container {
       spr.x = FIELD_CIRCLE.cx + off.x / 2;
       spr.y = FIELD_CIRCLE.cy + off.y / 2;
     } else {
-      const baseScale  = Math.max(HAND_ART_BOX.w / iw, HAND_ART_BOX.h / ih);
+      const artBox = this.card.type === 'spell' ? SPELL_ART_BOX : HAND_ART_BOX;
+      const baseScale  = Math.max(artBox.w / iw, artBox.h / ih);
       const totalScale = baseScale * (this.card.artZoom ?? 1);
       spr.width  = iw * totalScale;
       spr.height = ih * totalScale;
       const off = this.card.artOffset ?? { x: 0, y: 0 };
-      spr.x = artCX() + off.x / 2;
-      spr.y = artCY() + off.y / 2;
+      spr.x = artCX(artBox) + off.x / 2;
+      spr.y = artCY(artBox) + off.y / 2;
     }
   }
 
@@ -359,9 +379,9 @@ export class CardView extends PIXI.Container {
     badge.addChild(pill);
 
     const txt = new PIXI.Text(label, new PIXI.TextStyle({
-      fontFamily:      '"Impact", "Arial Black", sans-serif',
-      fontSize:        11,
-      fontWeight:      'bold',
+      fontFamily:      '"Cinzel", serif',
+      fontSize:        10,
+      fontWeight:      '700',
       fill:            0xffffff,
       stroke:          0x000000,
       strokeThickness: 2,
@@ -483,7 +503,10 @@ export class CardView extends PIXI.Container {
    */
   useFrontFace() {
     this._sprite.scale.set(1, 1);
-    this._sprite.texture = cardTexture;
+    // Restore the correct frame depending on card type
+    const _isSpell = this.card.type === 'spell';
+    const _tex = _isSpell ? spellCardTexture : cardTexture;
+    this._sprite.texture = _tex;
     // Glow returns to top layer in hand mode
     this._glow.zIndex = 3;
     this.sortChildren();
@@ -491,8 +514,17 @@ export class CardView extends PIXI.Container {
       this._sprite.width  = CARD_W;
       this._sprite.height = CARD_H;
     };
-    if (cardTexture.baseTexture.valid) applySize();
-    else cardTexture.baseTexture.once('loaded', applySize);
+    if (_tex.baseTexture.valid) applySize();
+    else _tex.baseTexture.once('loaded', applySize);
+    // Restore spell-specific or minion label positions
+    if (this._nameLabel) {
+      this._nameLabel.x = _isSpell ? SPELL_NAME_OFFSET.x : NAME_OFFSET.x;
+      this._nameLabel.y = _isSpell ? SPELL_NAME_OFFSET.y : NAME_OFFSET.y;
+    }
+    if (this._manaLabel) {
+      this._manaLabel.x = _isSpell ? SPELL_MANA_OFFSET.x : MANA_OFFSET.x;
+      this._manaLabel.y = _isSpell ? SPELL_MANA_OFFSET.y : MANA_OFFSET.y;
+    }
     const isSpell = this.card.type === 'spell';
     this._attackLabel.visible  = !isSpell;
     this._healthLabel.visible  = !isSpell;

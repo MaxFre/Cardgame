@@ -112,9 +112,6 @@ export function init(app) {
   // Spell cast callback — fires the card's on-play effect when player casts a spell
   const _playerDrawCb = { drawCard: () => { drawCardToHand(playerDeck, hand); playerDeckView.setCount(playerDeck.length); } };
   setSpellCallback(async cv => {
-    // Spell cast flash — fires a burst ring at the card's current world position
-    // (card is still alive and fading during the expand tween in DragDrop)
-    await vfx.battlecryBurst(cv).catch(() => {});
     const eff = cv.card.onPlayEffect;
     if (!eff?.id) return;
     const meta = EFFECTS_BY_ID[eff.id];
@@ -196,7 +193,7 @@ export function init(app) {
     await AnimationSequencer.runCardPlay({
       summon_vfx: async () => { /* fired in onCardLanded */ },
       battlecry_burst: async () => {
-        if (_canUseBattlecry(eff, cardView, playerField, opponentField)) {
+        if (eff?.id) {
           const meta = EFFECTS_BY_ID[eff.id];
           if (meta?.requiresTarget) {
             // Fire and don't await — targets appear while burst is still playing
@@ -247,7 +244,7 @@ export function init(app) {
     await AnimationSequencer.runCardPlay({
       summon_vfx: async () => { /* fired in onCardLanded */ },
       battlecry_burst: async () => {
-        if (_canUseBattlecry(eff, cardView, opponentField, playerField)) {
+        if (eff?.id) {
           const meta = EFFECTS_BY_ID[eff.id];
           if (meta?.requiresTarget) {
             vfx.battlecryBurst(cardView, faction).catch(() => {});

@@ -241,11 +241,12 @@ export class CombatSystem {
       attacker.setHealth(attacker.card.health - dmgToAttacker);
 
       // Floating damage numbers
+      // Note: attacker has been reparented to stage, so its x/y are already global coords.
+      // target is still a child of targetField, so we convert via toGlobal.
       if (this._vfx) {
         const tg = targetField.toGlobal({x: target.x, y: target.y});
-        const ag = attackerField.toGlobal({x: attacker.x, y: attacker.y});
-        this._vfx.floatNumber(tg.x, tg.y, `-${dmgToTarget}`,   0xff4444).catch(() => {});
-        this._vfx.floatNumber(ag.x, ag.y, `-${dmgToAttacker}`, 0xff8888).catch(() => {});
+        this._vfx.floatNumber(tg.x, tg.y,         `-${dmgToTarget}`,   0xff4444).catch(() => {});
+        this._vfx.floatNumber(attacker.x, attacker.y, `-${dmgToAttacker}`, 0xff8888).catch(() => {});
       }
 
       // 3. Snap back to home position

@@ -3,7 +3,8 @@ import { init }  from './ui/BoardUI.js';
 import { Card }  from './game/Card.js';
 import { ATTACK_OFFSET, HEALTH_OFFSET, FIELD_ATTACK_OFFSET, FIELD_HEALTH_OFFSET,
          NAME_OFFSET, MANA_OFFSET, FACTION_OFFSET, FIELD_FACTION_OFFSET,
-         FIELD_CIRCLE, HAND_ART_BOX, FACTION_ICON_CFG, configureGlow } from './game/CardView.js';
+         SPELL_NAME_OFFSET, SPELL_MANA_OFFSET,
+         FIELD_CIRCLE, HAND_ART_BOX, SPELL_ART_BOX, FACTION_ICON_CFG, configureGlow } from './game/CardView.js';
 import { Stars }  from './game/Stars.js';
 import { Leaves } from './game/Leaves.js';
 import { Fire }   from './game/Fire.js';
@@ -51,6 +52,12 @@ function applyStatLayout() {
       Object.assign(FIELD_HEALTH_OFFSET,  toOffset(field.health,  FIELD_HEALTH_OFFSET));
       Object.assign(FIELD_FACTION_OFFSET, toOffset(field.faction, FIELD_FACTION_OFFSET));
       if (hand.factionIconSize) FACTION_ICON_CFG.size = hand.factionIconSize / 2;
+      // Spell card label positions (hand view, saved under the 'spell' key)
+      const spell = saved.spell ?? null;
+      if (spell) {
+        Object.assign(SPELL_NAME_OFFSET, toOffset(spell.name, SPELL_NAME_OFFSET));
+        Object.assign(SPELL_MANA_OFFSET, toOffset(spell.mana, SPELL_MANA_OFFSET));
+      }
     }
   } catch { /* use defaults */ }
   try {
@@ -68,6 +75,15 @@ function applyStatLayout() {
       HAND_ART_BOX.y = box.y / 2;
       HAND_ART_BOX.w = box.w / 2;
       HAND_ART_BOX.h = box.h / 2;
+    }
+  } catch { /* use defaults */ }
+  try {
+    const sbox = data.spellArtBox ?? null;
+    if (sbox) {
+      SPELL_ART_BOX.x = sbox.x / 2;
+      SPELL_ART_BOX.y = sbox.y / 2;
+      SPELL_ART_BOX.w = sbox.w / 2;
+      SPELL_ART_BOX.h = sbox.h / 2;
     }
   } catch { /* use defaults */ }
 }

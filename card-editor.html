@@ -3,6 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&display=swap" rel="stylesheet">
     <title>Card Editor</title>
     <style>
       *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -502,7 +505,7 @@
           🖱️ Drag to reposition &nbsp;·&nbsp; Scroll to zoom
         </p>
         <button class="btn btn-outline" id="btn-reset-art" style="display:none; padding:6px 14px; font-size:.8rem;">↺ Reset Position</button>
-        <p style="font-size:.72rem; color:var(--muted); text-align:center; line-height:1.5; margin:0;">⚔️ Drag the <b style="color:#f97316">⚔ATK</b> · <b style="color:#ef4444">❤HP</b> · <b style="color:#60a5fa">💧Mana</b> · <b style="color:#ffd700">Name</b> to reposition</p>
+        <p style="font-size:.72rem; color:var(--muted); text-align:center; line-height:1.5; margin:0;">⚔️ Drag the <b style="color:#f97316">⚔ATK</b> · <b style="color:#ef4444">❤HP</b> · <b style="color:#60a5fa">💧Rations #</b> · <b style="color:#a78bfa">🪙Ration icon</b> · <b style="color:#ffd700">Name</b> to reposition</p>
         <p id="hand-art-hint" style="font-size:.72rem; color:var(--muted); text-align:center; line-height:1.5; margin:0;"><b style="color:#aaa">⬜ Drag crosshair</b> to move art window · <b style="color:#aaa">white dot</b> (corner) to resize</p>
         <p id="field-circle-hint" style="display:none; font-size:.72rem; color:var(--muted); text-align:center; line-height:1.5; margin:0;"><b style="color:#aaa">🔵 Drag crosshair</b> to move circle · <b style="color:#aaa">white dot</b> to resize</p>
         <button class="btn btn-outline" id="btn-reset-stats" style="padding:6px 14px; font-size:.8rem;">↺ Reset This View's Positions</button>
@@ -560,8 +563,12 @@
               <button class="faction-btn active" data-faction="Folk">🏘 Folk</button>
             </div>
             <div class="slider-field" style="margin-top:8px">
-              <label>Icon size <span id="icon-size-val">56</span>px</label>
+              <label>Faction icon size <span id="icon-size-val">56</span>px</label>
               <input type="range" id="icon-size-slider" min="10" max="200" step="1" value="56">
+            </div>
+            <div class="slider-field" style="margin-top:8px">
+              <label>Ration icon size <span id="ration-icon-size-val">28</span>px</label>
+              <input type="range" id="ration-icon-size-slider" min="10" max="120" step="1" value="28">
             </div>
           </div>
 

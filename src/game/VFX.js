@@ -760,50 +760,129 @@ export class VFX {
 
     const palette = FACTION_COLORS[faction] ?? { ring: 0xffaa00, burst: 0xffd700, flash: 0xffd700 };
 
-    this._shockwave(c.x, c.y, palette.ring, 115, 330);
+    // ── Screen shake for weight ───────────────────────────────────────────
+    this.screenShake(6, 320);
 
+    // ── Ring 1: tight white shockwave fires immediately (async) ──────────
+    this._shockwave(c.x, c.y, 0xffffff, 68, 200);
+
+    // ── Central punch flash — additive disc that punches out then fades ──
+    const flash = new PIXI.Graphics();
+    flash.blendMode = PIXI.BLEND_MODES.ADD;
+    flash.x = c.x; flash.y = c.y;
+    this.container.addChild(flash);
+    const flashT = Date.now();
+    await new Promise(resolve => {
+      const tick = () => {
+        const t = Math.min(1, (Date.now() - flashT) / 210);
+        flash.clear();
+        flash.beginFill(palette.flash, (1 - t) * 0.92);
+        flash.drawCircle(0, 0, 14 + t * 58);
+        flash.endFill();
+        if (t < 1) requestAnimationFrame(tick);
+        else { this._remove(flash); resolve(); }
+      };
+      requestAnimationFrame(tick);
+    });
+
+    // ── Rings 2 & 3: staggered faction-colour rings ───────────────────────
+    this._shockwave(c.x, c.y, palette.ring,  112, 310);
+    await _wait(90);
+    this._shockwave(c.x, c.y, palette.burst, 158, 430);
+
+    // ── 8 lance shards — thin additive diamonds at evenly-spaced angles ──
+    const shards = [];
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2 + rand(-0.13, 0.13);
+      const len   = rand(30, 58);
+      const wid   = rand(3.5, 6.5);
+      const dist  = rand(85, 148);
+      const col   = i % 4 === 0 ? 0xffffff : i % 2 === 0 ? palette.burst : palette.ring;
+
+      const g = new PIXI.Graphics();
+      g.blendMode = PIXI.BLEND_MODES.ADD;
+      // Outer diamond
+      g.beginFill(col, 1);
+      g.moveTo(0,      -len * 0.5);
+      g.lineTo(wid,     0);
+      g.lineTo(0,       len * 0.5);
+      g.lineTo(-wid,    0);
+      g.closePath();
+      g.endFill();
+      // Inner white core streak
+      g.beginFill(0xffffff, 0.7);
+      g.moveTo(0,           -len * 0.22);
+      g.lineTo(wid * 0.35,   0);
+      g.lineTo(0,            len * 0.22);
+      g.lineTo(-wid * 0.35,  0);
+      g.closePath();
+      g.endFill();
+
+      g.x = c.x; g.y = c.y;
+      g.rotation = angle + Math.PI * 0.5; // tip points outward
+      this.container.addChild(g);
+      shards.push(g);
+      tweenTo(g, {
+        x: c.x + Math.cos(angle) * dist,
+        y: c.y + Math.sin(angle) * dist,
+        alpha: 0,
+      }, rand(520, 730));
+    }
+
+    // ── Ember cloud — upward-biased glowing sparks ────────────────────────
+    const embers = [];
+    for (let i = 0; i < 30; i++) {
+      const g = this._dot(rand(2, 6), i % 4 === 0 ? 0xffffff : i % 2 === 0 ? palette.burst : palette.ring);
+      g.blendMode = PIXI.BLEND_MODES.ADD;
+      // Compress angle range toward the top hemisphere, with scatter sideways
+      const a     = rand(-Math.PI, Math.PI);
+      const bAngle = a * 0.5 - Math.PI * 0.5; // squash toward upper half
+      const dist  = rand(30, 110);
+      g.x = c.x + rand(-20, 20); g.y = c.y + rand(-14, 14);
+      this.container.addChild(g);
+      embers.push(g);
+      tweenTo(g, {
+        x: c.x + Math.cos(bAngle) * dist,
+        y: c.y + Math.sin(bAngle) * dist - rand(22, 68),
+        alpha: 0,
+      }, rand(560, 960));
+    }
+
+    // ── "!" stamp — scale-punches in, then drifts up and fades ──────────
     const label = new PIXI.Text('!', {
       fontFamily:      '"Impact", sans-serif',
-      fontSize:        68,
+      fontSize:        76,
       fontWeight:      'bold',
       fill:            palette.burst,
       stroke:          0x000000,
-      strokeThickness: 6,
+      strokeThickness: 7,
       dropShadow:      true,
-      dropShadowBlur:  12,
+      dropShadowBlur:  18,
       dropShadowColor: 0x000000,
       dropShadowAlpha: 1,
       dropShadowDistance: 0,
     });
     label.anchor.set(0.5);
-    label.x = c.x; label.y = c.y - 20;
-    label.alpha = 0; label.scale.set(0.3);
+    label.x = c.x; label.y = c.y - 14;
+    label.alpha = 0; label.scale.set(0.12);
     this.container.addChild(label);
-    tweenTo(label, { alpha: 1, y: c.y - 70 }, 160);
-    const t0 = Date.now();
-    const growTick = () => {
-      const p = Math.min(1, (Date.now() - t0) / 160);
-      label.scale.set(0.3 + 0.7 * p);
-      if (p < 1) requestAnimationFrame(growTick);
+    const labelT = Date.now();
+    const labelGrow = () => {
+      const p = Math.min(1, (Date.now() - labelT) / 210);
+      const ease = 1 - (1 - p) * (1 - p); // ease-out quad
+      label.scale.set(0.12 + ease * 1.08); // overshoot to 1.2×
+      label.alpha = p;
+      if (p < 1) requestAnimationFrame(labelGrow);
     };
-    requestAnimationFrame(growTick);
+    requestAnimationFrame(labelGrow);
+    tweenTo(label, { y: c.y - 68 }, 210);
 
-    await _wait(270);
-    tweenTo(label, { alpha: 0, y: c.y - 125 }, 420).then(() => this._remove(label));
+    await _wait(360);
+    tweenTo(label, { alpha: 0, y: c.y - 138 }, 420).then(() => this._remove(label));
 
-    const sparks = [];
-    for (let i = 0; i < 42; i++) {
-      const g = this._dot(rand(2, 7), i % 4 === 0 ? 0xffffff : i % 2 === 0 ? palette.ring : palette.burst);
-      const angle = (i / 42) * Math.PI * 2 + rand(-0.4, 0.4);
-      const dist  = rand(50, 125);
-      g.x = c.x; g.y = c.y;
-      this.container.addChild(g);
-      sparks.push(g);
-      tweenTo(g, { x: c.x + Math.cos(angle) * dist, y: c.y + Math.sin(angle) * dist + rand(0, 40), alpha: 0 },
-              rand(500, 820));
-    }
-    await _wait(880);
-    for (const s of sparks) this._remove(s);
+    await _wait(1010);
+    for (const s of shards) this._remove(s);
+    for (const e of embers) this._remove(e);
   }
 
   /**
