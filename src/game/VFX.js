@@ -535,6 +535,11 @@ export class VFX {
    */
   async healSparkles(card) {
     const c = _cardWorld(card);
+    // Use custom preset if assigned
+    if (this._hasSpecialPreset('healing')) {
+      await this._playSpecialPreset('healing', c.x, c.y);
+      return;
+    }
     const sparks = [];
 
     for (let i = 0; i < 22; i++) {
@@ -649,8 +654,13 @@ export class VFX {
    * Vertical streak sweep on a card for attack buff / debuff.
    */
   async attackBuff(card, isPositive = true) {
+    const c = _cardWorld(card);
+    const presetKey = isPositive ? 'positivBuff' : 'negativBuff';
+    if (this._hasSpecialPreset(presetKey)) {
+      await this._playSpecialPreset(presetKey, c.x, c.y);
+      return;
+    }
     const color  = isPositive ? 0xffaa00 : 0xff2200;
-    const c      = _cardWorld(card);
     const sparks = [];
     for (let i = 0; i < 18; i++) {
       const h  = rand(8, 18);

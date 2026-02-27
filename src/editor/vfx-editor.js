@@ -308,6 +308,26 @@ function renderSpecialSelects() {
     }
   }
 
+  // Healing / PositivBuff / NegativBuff — simple preset selects
+  for (const { key, fallback } of [
+    { key: 'healing',    fallback: '— Default (sparkles) —' },
+    { key: 'positivBuff', fallback: '— Default (streaks) —' },
+    { key: 'negativBuff', fallback: '— Default (streaks) —' },
+  ]) {
+    const el = document.getElementById('special_' + key);
+    if (!el) continue;
+    const current = sp[key] ?? '';
+    el.innerHTML = `<option value="">${fallback}</option>`;
+    for (const [id, preset] of Object.entries(presets)) {
+      if (id.startsWith('_')) continue;
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = preset.name ?? id;
+      if (id === current) opt.selected = true;
+      el.appendChild(opt);
+    }
+  }
+
   // Damage bolt + morale bolt: impact preset + color / size / speed
   [
     { key: 'damageBolt', colorDef: '#ff6600', sizeDef: 10, speedDef: 320 },
@@ -351,9 +371,11 @@ function renderSpecialSelects() {
   });
 }
 
-// Impact preset dropdowns (battlecry / damageBolt impact / moraleBolt impact / death)
-['battlecry', 'damageBolt', 'moraleBolt', 'death'].forEach(key => {
-  const elId = key === 'death' ? 'specialDeath' : ('special' + key.charAt(0).toUpperCase() + key.slice(1));
+// Impact preset dropdowns (battlecry / damageBolt impact / moraleBolt impact / death / healing / positivBuff / negativBuff)
+['battlecry', 'damageBolt', 'moraleBolt', 'death', 'healing', 'positivBuff', 'negativBuff'].forEach(key => {
+  const elId = key === 'death' ? 'specialDeath'
+    : ['healing','positivBuff','negativBuff'].includes(key) ? ('special_' + key)
+    : ('special' + key.charAt(0).toUpperCase() + key.slice(1));
   const sel  = document.getElementById(elId);
   if (!sel) return;
   sel.addEventListener('change', () => {
