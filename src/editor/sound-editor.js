@@ -82,9 +82,9 @@ function dataUrlSize(url) {
 
 function buildSlotCard(key) {
   const meta = SLOT_META[key];
-  const stored = localStorage.getItem(`sound-custom-${key}`);
-  const volume = parseFloat(localStorage.getItem(`sound-volume-${key}`) ?? '1');
-  const hasCustom = !!stored;
+  const info = SoundManager.getCustomInfo()[key];
+  const hasCustom = info.hasCustom;
+  const volume = info.volume;
 
   const card = document.createElement('div');
   card.className = 'slot-card';
@@ -128,7 +128,8 @@ function buildSlotCard(key) {
   if (hasCustom) {
     requestAnimationFrame(() => {
       const canvas = card.querySelector(`#wave-${key}`);
-      if (canvas) drawWaveform(canvas, stored, meta.color);
+      const dataUrl = SoundManager.getCustomInfo()[key]?.dataUrl ?? null;
+      if (canvas && dataUrl) drawWaveform(canvas, dataUrl, meta.color);
     });
   }
 
@@ -136,7 +137,7 @@ function buildSlotCard(key) {
 }
 
 function _filename(key) {
-  return localStorage.getItem(`sound-fname-${key}`) ?? 'Custom file';
+  return SoundManager.getCustomInfo()[key]?.fname ?? 'Custom file';
 }
 
 // ── Wire up events on a card ──────────────────────────────────────────────
@@ -167,9 +168,8 @@ function wireCard(card) {
   // Clear button
   const clearBtn = card.querySelector(`#clear-${key}`);
   if (clearBtn) {
-    clearBtn.addEventListener('click', () => {
-      SoundManager.clearCustom(key);
-      localStorage.removeItem(`sound-fname-${key}`);
+    clearBtn.addEventListener('click', async () => {
+      await SoundManager.clearCustom(key);
       updateCardUI(key, false);
     });
   }
@@ -191,11 +191,9 @@ async function handleFile(key, file) {
   const reader = new FileReader();
   reader.onload = async e => {
     const dataUrl = e.target.result;
-    // Store filename for display
-    localStorage.setItem(`sound-fname-${key}`, file.name);
-    // Persist + decode
+    // Persist + decode (fname stored in SoundManager now)
     const vol = parseFloat(document.getElementById(`vol-${key}`)?.value ?? '1');
-    await SoundManager.setCustom(key, dataUrl, vol);
+    await SoundManager.setCustom(key, dataUrl, vol, file.name);
     updateCardUI(key, true, { name: file.name, size: file.size, dataUrl, color: meta.color });
   };
   reader.readAsDataURL(file);
@@ -253,13 +251,10 @@ muteBtn.addEventListener('click', () => {
   muteBtn.textContent = nowMuted ? '🔇 Mute' : '🔊 Unmute';
 });
 
-clearAllBtn.addEventListener('click', () => {
+clearAllBtn.addEventListener('click', async () => {
   if (!confirm('Remove all custom sounds and revert to built-in?')) return;
-  SOUND_KEYS.forEach(key => {
-    SoundManager.clearCustom(key);
-    localStorage.removeItem(`sound-fname-${key}`);
-    updateCardUI(key, false);
-  });
+  await Promise.all(SOUND_KEYS.map(key => SoundManager.clearCustom(key)));
+  SOUND_KEYS.forEach(key => updateCardUI(key, false));
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────

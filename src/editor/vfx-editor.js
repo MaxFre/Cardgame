@@ -114,15 +114,6 @@ function makeDefaultStep(type) {
 }
 
 // ── Storage ───────────────────────────────────────────────────────────────────
-const STORAGE_KEY = 'vfx-presets';
-
-function loadPresets() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
-  catch { return {}; }
-}
-function savePresetsToLocal(data) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
 async function savePresetsToFile(data) {
   try {
     await fetch('/api/save-vfx-presets', {
@@ -134,7 +125,7 @@ async function savePresetsToFile(data) {
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let presets        = loadPresets();
+let presets        = {}; // populated from vfx-presets.json on startup
 let currentId      = null;
 let selectedStep   = null; // index
 let _looping       = false;
@@ -213,7 +204,6 @@ function previewBolt(key) {
   if (colorEl) presets._specialPresets[key + 'Color'] = colorEl.value;
   if (sizeEl)  presets._specialPresets[key + 'Size']  = Number(sizeEl.value);
   if (speedEl) presets._specialPresets[key + 'Speed'] = Number(speedEl.value);
-  try { localStorage.setItem('vfx-special-presets', JSON.stringify(presets._specialPresets)); } catch {}
   // Sync VFX instance so the test uses latest values
   vfx._specialPresetsSync = presets._specialPresets;
 
@@ -278,8 +268,8 @@ function renderFactionSelects() {
   sel.addEventListener('change', () => {
     if (!presets._factionPresets) presets._factionPresets = {};
     presets._factionPresets[faction] = sel.value || null;
-    // also write sync key so VFX.js can read without await
-    try { localStorage.setItem('vfx-faction-presets', JSON.stringify(presets._factionPresets)); } catch {}
+    // sync VFX instance for live preview
+    vfx._factionPresetsSync = presets._factionPresets;
     persistPresets();
   });
 });
@@ -369,7 +359,7 @@ function renderSpecialSelects() {
   sel.addEventListener('change', () => {
     if (!presets._specialPresets) presets._specialPresets = {};
     presets._specialPresets[key] = sel.value || null;
-    try { localStorage.setItem('vfx-special-presets', JSON.stringify(presets._specialPresets)); } catch {}
+    vfx._specialPresetsSync = presets._specialPresets;
     persistPresets();
   });
 });
@@ -396,7 +386,7 @@ function renderSpecialSelects() {
     if (sizeEl)  presets._specialPresets[key + 'Size']        = Number(sizeEl.value);
     if (speedEl) presets._specialPresets[key + 'Speed']       = Number(speedEl.value);
     if (scaleEl) presets._specialPresets[key + 'SpriteScale'] = Number(scaleEl.value);
-    try { localStorage.setItem('vfx-special-presets', JSON.stringify(presets._specialPresets)); } catch {}
+    vfx._specialPresetsSync = presets._specialPresets;
     persistPresets();
   }
 
@@ -426,7 +416,6 @@ function renderSpecialSelects() {
       const dataUrl = e.target.result;
       if (!presets._specialPresets) presets._specialPresets = {};
       presets._specialPresets[key + 'Sprite'] = dataUrl;
-      try { localStorage.setItem('vfx-special-presets', JSON.stringify(presets._specialPresets)); } catch {}
       persistPresets();
       if (thumbEl) { thumbEl.src = dataUrl; thumbEl.style.display = ''; }
       if (emptyEl) emptyEl.style.display = 'none';
@@ -440,7 +429,6 @@ function renderSpecialSelects() {
   clearBtn?.addEventListener('click', () => {
     if (!presets._specialPresets) presets._specialPresets = {};
     delete presets._specialPresets[key + 'Sprite'];
-    try { localStorage.setItem('vfx-special-presets', JSON.stringify(presets._specialPresets)); } catch {}
     persistPresets();
     if (thumbEl) thumbEl.style.display = 'none';
     if (emptyEl) emptyEl.style.display = '';
@@ -678,7 +666,6 @@ function renderInspector() {
 
 // ── Save ──────────────────────────────────────────────────────────────────────
 async function persistPresets() {
-  savePresetsToLocal(presets);
   await savePresetsToFile(presets);
 }
 
@@ -689,7 +676,7 @@ document.getElementById('btnSave').addEventListener('click', async () => {
   setTimeout(() => badge.style.opacity = '0', 1600);
 });
 
-// Load presets from file on startup (file wins over localStorage for sharing)
+// Load presets from file on startup
 ;(async function syncFromFile() {
   try {
     const res = await fetch('/CreatedCards/vfx-presets.json?t=' + Date.now());
@@ -697,15 +684,6 @@ document.getElementById('btnSave').addEventListener('click', async () => {
     const data = await res.json();
     if (data && typeof data === 'object' && Object.keys(data).length > 0) {
       presets = data;
-      savePresetsToLocal(presets);
-      // Sync faction presets to localStorage for game-side sync access
-      if (presets._factionPresets) {
-        try { localStorage.setItem('vfx-faction-presets', JSON.stringify(presets._factionPresets)); } catch {}
-      }
-      // Sync special presets to localStorage
-      if (presets._specialPresets) {
-        try { localStorage.setItem('vfx-special-presets', JSON.stringify(presets._specialPresets)); } catch {}
-      }
     }
   } catch { /* server not available */ }
   // Select first non-meta preset if any

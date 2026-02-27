@@ -28,14 +28,9 @@ export class VFX {
     this.container = new PIXI.Container();
     // Must be added to stage by the caller (after all other layers).
     this._presetCache = null; // loaded vfx-presets.json
-    // Sync faction→preset map for no-await access (Battlefield ring burst guard)
-    try {
-      this._factionPresetsSync = JSON.parse(localStorage.getItem('vfx-faction-presets') || '{}');
-    } catch { this._factionPresetsSync = {}; }
-    // Sync special preset map (battlecry / damageBolt / moraleBolt)
-    try {
-      this._specialPresetsSync = JSON.parse(localStorage.getItem('vfx-special-presets') || '{}');
-    } catch { this._specialPresetsSync = {}; }
+    // Sync faction→preset map and special preset map; populated on first _loadPresets() call.
+    this._factionPresetsSync = {};
+    this._specialPresetsSync = {};
     this._active = 0; // count of animations currently running
   }
 

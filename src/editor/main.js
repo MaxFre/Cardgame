@@ -21,29 +21,23 @@ const CY     = H / 2;         // 192  (vertical centre)
 // Art bounding box – default matches the transparent window in EmptyCard.png (at 256×384 canvas)
 const ART = { x: 14, y: 42, w: 228, h: 232 }; // kept for export fallback
 
-// ── Hand art window (mutable, saved to localStorage) ─────────────────────────
+// ── Hand art window (mutable, persisted to layout.json) ─────────────────────────
 const HAND_ART_KEY     = 'card-hand-art-box';
 const HAND_ART_DEFAULT = { x: 14, y: 42, w: 228, h: 232 };
 
 function loadHandArtBox() {
-  try {
-    const s = JSON.parse(localStorage.getItem(HAND_ART_KEY) || 'null');
-    if (!s) return { ...HAND_ART_DEFAULT };
-    return { x: s.x ?? HAND_ART_DEFAULT.x, y: s.y ?? HAND_ART_DEFAULT.y,
-             w: s.w ?? HAND_ART_DEFAULT.w, h: s.h ?? HAND_ART_DEFAULT.h };
-  } catch { return { ...HAND_ART_DEFAULT }; }
+  return { ...HAND_ART_DEFAULT };
 }
 function saveHandArtBox() {
-  localStorage.setItem(HAND_ART_KEY, JSON.stringify(handArtBox));
   _saveLayoutToFile();
 }
 
-let handArtBox = loadHandArtBox();
+let handArtBox = { ...HAND_ART_DEFAULT };
 
 // Description position (fixed)
 const DESC_Y = 258;
 
-// ── Stat positions (draggable per view mode, saved to localStorage) ───────────
+// ── Stat positions (draggable per view mode, persisted to layout.json) ───────────
 const STAT_LAYOUT_KEY = 'card-stat-layout';
 const MODE_DEFAULTS = {
   hand: {
@@ -65,27 +59,10 @@ const MODE_DEFAULTS = {
 };
 
 function loadStatLayout() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(STAT_LAYOUT_KEY) || 'null');
-    const load = (mode) => {
-      // Support old single-mode format (no .hand/.field keys)
-      const src = saved?.[mode] ?? (saved?.attack ? (mode === 'hand' ? saved : {}) : {});
-      const def = MODE_DEFAULTS[mode];
-      return {
-        attack:  src.attack  ?? { ...def.attack  },
-        health:  src.health  ?? { ...def.health  },
-        mana:    src.mana    ?? { ...def.mana    },
-        name:    src.name    ?? { ...def.name    },
-        faction: src.faction ?? { ...def.faction },
-        factionIconSize: src.factionIconSize ?? def.factionIconSize,
-      };
-    };
-    return { hand: load('hand'), field: load('field') };
-  } catch { return structuredClone(MODE_DEFAULTS); }
+  return structuredClone(MODE_DEFAULTS);
 }
 
 function saveStatLayout() {
-  localStorage.setItem(STAT_LAYOUT_KEY, JSON.stringify(layout));
   _saveLayoutToFile();
 }
 
@@ -113,36 +90,34 @@ const FIELD_CIRCLE_KEY     = 'card-field-circle';
 const FIELD_CIRCLE_DEFAULT = { cx: CX, cy: 156, r: 89 };
 
 function loadFieldCircle() {
-  try {
-    const s = JSON.parse(localStorage.getItem(FIELD_CIRCLE_KEY) || 'null');
-    if (!s) return { ...FIELD_CIRCLE_DEFAULT };
-    return { cx: s.cx ?? FIELD_CIRCLE_DEFAULT.cx,
-             cy: s.cy ?? FIELD_CIRCLE_DEFAULT.cy,
-             r:  s.r  ?? FIELD_CIRCLE_DEFAULT.r  };
-  } catch { return { ...FIELD_CIRCLE_DEFAULT }; }
+  return { ...FIELD_CIRCLE_DEFAULT };
 }
 function saveFieldCircle() {
-  localStorage.setItem(FIELD_CIRCLE_KEY, JSON.stringify(fieldCircle));
   _saveLayoutToFile();
 }
 
-let fieldCircle = loadFieldCircle();
+let fieldCircle = { ...FIELD_CIRCLE_DEFAULT };
 
 // ── Persist all layout data to layout.json via the Vite dev server ────────────
+// Module-level vars used by _saveLayoutToFile (set by editor sub-sections)
+let hlCfg = null;  // hand layout config — set by the hand layout IIFE
+let glowColors = { highlight: '#ffd700', buff: '#22ee66', damage: '#ff3333' };
+
 function _saveLayoutToFile() {
-  let handLayoutConfig;
-  try { handLayoutConfig = JSON.parse(localStorage.getItem('hand-layout-config') || 'null'); } catch { /* ignore */ }
   const payload = JSON.stringify({
-    statLayout:  layout,
-    fieldCircle: fieldCircle,
-    handArtBox:  handArtBox,
-    ...(handLayoutConfig ? { handLayoutConfig } : {}),
+    statLayout:      layout,
+    fieldCircle:     fieldCircle,
+    handArtBox:      handArtBox,
+    ...(hlCfg      ? { handLayoutConfig: hlCfg }     : {}),
+    ...(glowColors ? { glowColors }                  : {}),
+    ...(glowInset  !== 0   ? { glowInset }            : {}),
+    ...(glowWidth  !== 1.0 ? { glowWidth }            : {}),
   }, null, 2);
   fetch('/api/save-layout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: payload,
-  }).catch(() => { /* dev server not available — localStorage still has it */ });
+  }).catch(() => { /* dev server not available */ });
 }
 
 // Rarity colours
@@ -186,8 +161,8 @@ let editingId   = null;   // id of card being edited (null = new)
 
 // ── Glow preview state ────────────────────────────────────────────────────────
 let glowPreviewMode = 'none'; // 'none' | 'highlight' | 'buff' | 'damage'
-let glowInset = 0;            // ring offset in editor pixels (256×384 space); saved to localStorage
-let glowWidth = 1.0;          // ring stroke-width multiplier; saved to localStorage
+let glowInset = 0;            // ring offset in editor pixels (256×384 space); saved to layout.json
+let glowWidth = 1.0;          // ring stroke-width multiplier; saved to layout.json
 
 // ── Load frames ───────────────────────────────────────────────────────────────
 cardFrame = new Image();
@@ -572,8 +547,11 @@ function redraw() {
   // For field mode: glow goes BEHIND the frame (between art and frame layer).
   // For hand mode: glow goes ON TOP of the frame.
   const _glowActive = glowPreviewMode !== 'none';
-  let gc; try { gc = JSON.parse(localStorage.getItem('card-glow-colors') || '{}'); } catch { gc = {}; }
-  const _glowColorMap = { highlight: gc.highlight || '#ffd700', buff: gc.buff || '#22ee66', damage: gc.damage || '#ff3333' };
+  const _glowColorMap = {
+    highlight: glowColors?.highlight || '#ffd700',
+    buff:      glowColors?.buff      || '#22ee66',
+    damage:    glowColors?.damage    || '#ff3333',
+  };
 
   if (_glowActive && viewMode === 'field') {
     drawGlowPreview(_glowColorMap[glowPreviewMode], glowInset, glowWidth);
@@ -1250,7 +1228,7 @@ btnNew.addEventListener('click', () => {
 });
 
 btnPlay.addEventListener('click', () => {
-  // Open the game in the same tab – always loads fresh so localStorage is read
+  // Open the game in the same tab (always loads fresh from files)
   window.location.href = '/';
 });
 
@@ -1461,11 +1439,7 @@ function clampInt(val, min, max) {
 }
 
 function loadCollection() {
-  try {
-    const stored = JSON.parse(localStorage.getItem('card-editor-collection') || '[]');
-    if (stored.length > 0) return stored;
-  } catch { /* fall through */ }
-  // Seed from the bundled collection.json (same source as the game)
+  // Seed from the bundled collection.json; syncCollectionFromFile will update from the file
   if (Array.isArray(_bundledCollection) && _bundledCollection.length > 0) {
     return _bundledCollection;
   }
@@ -1473,9 +1447,6 @@ function loadCollection() {
 }
 
 async function saveCollection(cards) {
-  // Always mirror to localStorage so loadCollection() works instantly on next open
-  localStorage.setItem('card-editor-collection', JSON.stringify(cards));
-
   const json = JSON.stringify(cards, null, 2);
 
   // Save to src/assets/cards/CreatedCards/collection.json via the Vite dev plugin
@@ -1497,24 +1468,20 @@ async function saveCollection(cards) {
   URL.revokeObjectURL(url);
 }
 
-// On startup: if the collection file is empty but localStorage has cards,
-// immediately save them to the file so they get baked into the game.
-// Also fetch the file in case another browser/session has newer data.
+// On startup: fetch the latest collection from file
 ;(async function syncCollectionFromFile() {
   try {
     const res = await fetch('/CreatedCards/collection.json?t=' + Date.now());
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
-        // File has content — it wins; update localStorage and grid
-        localStorage.setItem('card-editor-collection', JSON.stringify(data));
         collection = data;
         rebuildGrid();
         return;
       }
     }
   } catch { /* server not available */ }
-  // File is empty or unreachable — push localStorage cards into the file now
+  // File is empty or unreachable — save what we have so it gets baked in
   if (collection.length > 0) {
     await saveCollection(collection);
   }
@@ -1529,21 +1496,47 @@ window.addEventListener('beforeunload', e => {
 populateForm(currentCard);
 rebuildGrid();
 redraw();
-// Write layout.json on startup so other browsers always have the latest settings
-_saveLayoutToFile();
+// Load saved layout from file so the editor shows the persisted values
+;(async function syncEditorLayoutFromFile() {
+  try {
+    const res = await fetch('/CreatedCards/layout.json?t=' + Date.now());
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.statLayout) {
+      const load = (mode) => {
+        const src = data.statLayout[mode] ?? {};
+        const def = MODE_DEFAULTS[mode];
+        return {
+          attack:  src.attack  ?? { ...def.attack  },
+          health:  src.health  ?? { ...def.health  },
+          mana:    src.mana    ?? { ...def.mana    },
+          name:    src.name    ?? { ...def.name    },
+          faction: src.faction ?? { ...def.faction },
+          factionIconSize: src.factionIconSize ?? def.factionIconSize,
+        };
+      };
+      layout = { hand: load('hand'), field: load('field') };
+      syncPosVars();
+    }
+    if (data.fieldCircle) Object.assign(fieldCircle, data.fieldCircle);
+    if (data.handArtBox)  Object.assign(handArtBox,  data.handArtBox);
+    if (data.handLayoutConfig) { hlCfg = data.handLayoutConfig; if (_syncHandLayoutUI) _syncHandLayoutUI(); }
+    if (data.glowColors)  { glowColors = data.glowColors; }
+    if (typeof data.glowInset === 'number') glowInset = data.glowInset;
+    if (typeof data.glowWidth === 'number') glowWidth = data.glowWidth;
+    redraw();
+  } catch { /* server not available — defaults are fine */ }
+})();
 
 // ── Hand Layout Editor ────────────────────────────────────────────────────────
+// Expose a re-sync hook so file load can push values to the UI
+let _syncHandLayoutUI = null;
 (function () {
-  const HLKEY = 'hand-layout-config';
   const HLDEFAULTS = { spacing: 145, angle: 6, arc: 6, hover: 30 };
   const HL_N = 5;
 
-  function loadHLCfg() {
-    try { return { ...HLDEFAULTS, ...JSON.parse(localStorage.getItem(HLKEY) || '{}') }; }
-    catch { return { ...HLDEFAULTS }; }
-  }
-
-  let hlCfg = loadHLCfg();
+  // Seed module-level hlCfg with defaults on first run
+  if (!hlCfg) hlCfg = { ...HLDEFAULTS };
 
   const canvas   = document.getElementById('hand-canvas');
   const ctx      = canvas.getContext('2d');
@@ -1672,7 +1665,6 @@ _saveLayoutToFile();
   slHover.addEventListener('input',   () => { hlCfg.hover   = +slHover.value;   syncSliders(); draw(); });
 
   document.getElementById('btn-hand-apply').addEventListener('click', () => {
-    localStorage.setItem(HLKEY, JSON.stringify(hlCfg));
     _saveLayoutToFile();  // bake hand-layout-config into layout.json for deployment
     const t = document.getElementById('save-toast');
     t.textContent = '\u2714 Hand layout saved!';
@@ -1682,46 +1674,40 @@ _saveLayoutToFile();
 
   document.getElementById('btn-hand-reset').addEventListener('click', () => {
     hlCfg = { ...HLDEFAULTS };
-    localStorage.removeItem(HLKEY);
     syncSliders(); draw();
   });
 
   syncSliders();
   draw();
+  // Expose syncSliders so syncLayoutFromFile can push new values to the UI
+  _syncHandLayoutUI = () => { syncSliders(); draw(); };
 })();
 
 // ── Glow colour pickers + preview + inset ────────────────────────────────────
 (function initGlowColors() {
-  const KEY       = 'card-glow-colors';
-  const INSET_KEY = 'card-glow-inset';
   const DEFAULTS  = { highlight: '#ffd700', buff: '#22ee66', damage: '#ff3333' };
 
-  // Load saved colours
-  let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch {}
-  const colors = { ...DEFAULTS, ...saved };
+  // Seed module-level glowColors with defaults if not set
+  if (!glowColors) glowColors = { ...DEFAULTS };
 
   const pHighlight = document.getElementById('glow-highlight');
   const pBuff      = document.getElementById('glow-buff');
   const pDamage    = document.getElementById('glow-damage');
   if (!pHighlight) return;
 
-  pHighlight.value = colors.highlight;
-  pBuff.value      = colors.buff;
-  pDamage.value    = colors.damage;
+  pHighlight.value = glowColors.highlight;
+  pBuff.value      = glowColors.buff;
+  pDamage.value    = glowColors.damage;
 
   function saveColors() {
-    const obj = { highlight: pHighlight.value, buff: pBuff.value, damage: pDamage.value };
-    localStorage.setItem(KEY, JSON.stringify(obj));
+    glowColors = { highlight: pHighlight.value, buff: pBuff.value, damage: pDamage.value };
     redraw();
   }
   pHighlight.addEventListener('input', saveColors);
   pBuff.addEventListener('input',      saveColors);
   pDamage.addEventListener('input',    saveColors);
 
-  // Load saved inset
-  const savedInset = parseFloat(localStorage.getItem(INSET_KEY) || '0');
-  glowInset = isNaN(savedInset) ? 0 : savedInset;
+  // Inset slider (glowInset is module-level, default 0)
   const slInset    = document.getElementById('glow-inset');
   const lblInset   = document.getElementById('glow-inset-val');
   if (slInset) {
@@ -1730,15 +1716,11 @@ _saveLayoutToFile();
     slInset.addEventListener('input', () => {
       glowInset = parseFloat(slInset.value);
       lblInset.textContent = glowInset + ' px';
-      localStorage.setItem(INSET_KEY, String(glowInset));
       redraw();
     });
   }
 
-  // Load saved width
-  const WIDTH_KEY   = 'card-glow-width';
-  const savedWidth  = parseFloat(localStorage.getItem(WIDTH_KEY) || '1');
-  glowWidth = isNaN(savedWidth) ? 1.0 : savedWidth;
+  // Width slider (glowWidth is module-level, default 1.0)
   const slWidth     = document.getElementById('glow-width');
   const lblWidth    = document.getElementById('glow-width-val');
   if (slWidth) {
@@ -1747,7 +1729,6 @@ _saveLayoutToFile();
     slWidth.addEventListener('input', () => {
       glowWidth = parseFloat(slWidth.value);
       lblWidth.textContent = glowWidth.toFixed(1) + '×';
-      localStorage.setItem(WIDTH_KEY, String(glowWidth));
       redraw();
     });
   }

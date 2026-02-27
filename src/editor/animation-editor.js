@@ -29,16 +29,9 @@ const STACK_GAP   = 48;  // vertical spacing when dots share a slot
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let activeKey  = 'cardPlay';
-// Deep-copy configs from localStorage (or defaults)
+// Start with defaults; will be overwritten on startup when layout.json is fetched
 const configs  = {};
 for (const [key, seq] of Object.entries(SEQUENCES)) {
-  try {
-    const saved = JSON.parse(localStorage.getItem(seq.key));
-    if (Array.isArray(saved) && saved.length === seq.phases.length) {
-      configs[key] = saved.map(x => ({ ...x }));
-      continue;
-    }
-  } catch { /* ignore */ }
   configs[key] = seq.defaults.map(x => ({ ...x }));
 }
 
@@ -266,11 +259,6 @@ document.getElementById('tabs').addEventListener('click', e => {
 
 // ── Save ─────────────────────────────────────────────────────────────────────
 document.getElementById('save-btn').addEventListener('click', () => {
-  for (const [key, seq] of Object.entries(SEQUENCES)) {
-    localStorage.setItem(seq.key, JSON.stringify(configs[key]));
-  }
-
-  // Also persist to layout.json so it survives deploys
   const payload = {
     animCardPlay: configs.cardPlay,
     animCombat:   configs.combat,
@@ -279,7 +267,7 @@ document.getElementById('save-btn').addEventListener('click', () => {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify(payload),
-  }).catch(() => { /* dev server not running — localStorage is enough */ });
+  }).catch(() => { /* dev server not running */ });
 
   const toast = document.getElementById('toast');
   toast.classList.add('show');
@@ -295,8 +283,21 @@ document.getElementById('tabs').addEventListener('click', () => {
   if (typeof resetPreview === 'function') resetPreview();
 });
 
-// ── Init ─────────────────────────────────────────────────────────────────────
-render();
+// ── Init: load saved configs from layout.json, then render ───────────────────
+;(async function syncFromFile() {
+  try {
+    const res = await fetch('/CreatedCards/layout.json?t=' + Date.now());
+    if (!res.ok) return;
+    const data = await res.json();
+    for (const [key, seq] of Object.entries(SEQUENCES)) {
+      const saved = data[seq.fileKey];
+      if (Array.isArray(saved) && saved.length === seq.phases.length) {
+        configs[key] = saved.map(x => ({ ...x }));
+      }
+    }
+  } catch { /* server not available — use defaults */ }
+  render();
+})();
 
 // ════════════════════════════════════════════════════════════════════════════
 // PREVIEW SYSTEM

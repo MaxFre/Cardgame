@@ -248,8 +248,22 @@ function _playDestroy() {
 
 // ── Registry ─────────────────────────────────────────────────────────────────
 
-// Custom AudioBuffers loaded from localStorage data URLs (set via sound editor)
+// Custom AudioBuffers loaded from sounds.json (set via sound editor)
 const _customBuffers = {};
+
+/** Persisted sound data: { [key]: { dataUrl, volume, fname } | null } */
+let _soundsData = {};
+
+/** Save _soundsData to sounds.json via the dev server API. */
+async function _persistSounds() {
+  try {
+    await fetch('/api/save-sounds', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(_soundsData),
+    });
+  } catch { /* dev server not running */ }
+}
 
 /** Decode a data URL into an AudioBuffer and cache it under `key`. */
 async function _loadCustomBuffer(key, dataUrl) {
@@ -322,40 +336,53 @@ export const SoundManager = {
   // ── Editor API ────────────────────────────────────────────────────────────
 
   /** Assign a data URL for a key and immediately decode it. Called by the editor. */
-  async setCustom(key, dataUrl, volume = 1) {
-    localStorage.setItem(`sound-custom-${key}`, dataUrl);
+  async setCustom(key, dataUrl, volume = 1, fname = null) {
     _keyVolumes[key] = volume;
-    localStorage.setItem(`sound-volume-${key}`, String(volume));
-    await _loadCustomBuffer(key, dataUrl);
+    _soundsData[key] = { dataUrl, volume, fname };
+    await Promise.all([
+      _loadCustomBuffer(key, dataUrl),
+      _persistSounds(),
+    ]);
   },
 
   /** Remove custom sound for a key, reverting to the procedural fallback. */
-  clearCustom(key) {
-    localStorage.removeItem(`sound-custom-${key}`);
+  async clearCustom(key) {
     delete _customBuffers[key];
+    delete _soundsData[key];
+    await _persistSounds();
   },
 
   /** Set per-key volume without changing the file. */
-  setKeyVolume(key, v) {
+  async setKeyVolume(key, v) {
     _keyVolumes[key] = v;
-    localStorage.setItem(`sound-volume-${key}`, String(v));
+    if (_soundsData[key]) _soundsData[key].volume = v;
+    await _persistSounds();
   },
 
-  /** Load all custom sounds stored in localStorage. Call once on game start. */
+  /** Load all custom sounds from sounds.json. Call once on game start. */
   async loadAllCustom() {
+    try {
+      const res = await fetch('/CreatedCards/sounds.json?t=' + Date.now());
+      if (!res.ok) return;
+      _soundsData = await res.json();
+    } catch { return; }
     await Promise.all(SOUND_KEYS.map(async key => {
-      const vol = parseFloat(localStorage.getItem(`sound-volume-${key}`) ?? '1');
-      if (!isNaN(vol)) _keyVolumes[key] = vol;
-      const url = localStorage.getItem(`sound-custom-${key}`);
-      if (url) await _loadCustomBuffer(key, url);
+      const entry = _soundsData[key];
+      if (!entry) return;
+      if (typeof entry.volume === 'number' && !isNaN(entry.volume)) {
+        _keyVolumes[key] = entry.volume;
+      }
+      if (entry.dataUrl) await _loadCustomBuffer(key, entry.dataUrl);
     }));
   },
 
   /** Returns info about current custom sounds (for the editor). */
   getCustomInfo() {
     return Object.fromEntries(SOUND_KEYS.map(key => [key, {
-      hasCustom: !!localStorage.getItem(`sound-custom-${key}`),
+      hasCustom: !!_soundsData[key]?.dataUrl,
       volume:    _keyVolumes[key] ?? 1,
+      fname:     _soundsData[key]?.fname ?? null,
+      dataUrl:   _soundsData[key]?.dataUrl ?? null,
     }]));
   },
 };

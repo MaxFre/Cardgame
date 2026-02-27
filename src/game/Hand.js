@@ -3,20 +3,33 @@ import { tweenTo }   from './Tween.js';
 import { CardPreview } from './CardPreview.js';
 
 const DEFAULTS = { spacing: 145, angle: 6, arc: 6, hover: 30 };
+
+// Module-level layout data — set by main.js after loading layout.json
+let _handLayoutCfg       = null;
+let _playerSlotPositions = {};
+let _opponentSlotPositions = {};
+
+/** Called from main.js once layout.json has been fetched. */
+export function configureHand(cfg, playerSlots, opponentSlots) {
+  if (cfg)           _handLayoutCfg           = cfg;
+  if (playerSlots)   _playerSlotPositions     = playerSlots;
+  if (opponentSlots) _opponentSlotPositions   = opponentSlots;
+  _cfg = getCfg(); // refresh cached config
+}
+
 function getCfg() {
-  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('hand-layout-config') || '{}') }; }
-  catch { return { ...DEFAULTS }; }
+  if (_handLayoutCfg) return { ...DEFAULTS, ..._handLayoutCfg };
+  return { ...DEFAULTS };
 }
 let _cfg = getCfg();
 
 // ── Custom per-size slot positions (set via hand layout editor) ───────────────
 const SLOT_KEY = 'hand-slot-positions';
+const OPPONENT_SLOT_KEY = 'hand-slot-positions-opponent';
 function getSlotPositions(n, key = SLOT_KEY) {
-  try {
-    const all = JSON.parse(localStorage.getItem(key) || '{}');
-    const slots = all[String(n)];
-    if (Array.isArray(slots) && slots.length === n) return slots;
-  } catch { /* fall through */ }
+  const all = key === OPPONENT_SLOT_KEY ? _opponentSlotPositions : _playerSlotPositions;
+  const slots = all?.[String(n)];
+  if (Array.isArray(slots) && slots.length === n) return slots;
   return null;
 }
 const HOVER_LIFT_PX = () => _cfg.hover;
@@ -30,7 +43,7 @@ export class Hand extends PIXI.Container {
     super();
     this.cards = [];
     this.sortableChildren = true;
-    /** Override to use a different localStorage key (e.g. opponent hand) */
+    /** Set to OPPONENT_SLOT_KEY for the opponent hand slot positions. */
     this.slotKey = 'hand-slot-positions';
     /** Set true for the opponent hand — disables card preview on hover */
     this.isOpponent = false;

@@ -29,11 +29,24 @@ function artCY() { return HAND_ART_BOX.y + HAND_ART_BOX.h / 2 - CARD_H / 2; }
 
 // Circle mask constants for field frame (game scale 128×192, relative to anchor 0.5)
 // PNG circle at 1024×1536: cx=512, cy=624, r=354  →  ÷4 at 256×384 editor → cx=128, cy=156, r=89  →  ÷2 game scale
-// Exported as an object so main.js can mutate .cx/.cy/.r after loading localStorage
+// Exported as an object so main.js can mutate .cx/.cy/.r after loading layout.json
 export const FIELD_CIRCLE = { cx: 0, cy: -18, r: 44 };
 
 // Faction icon size (game scale). Mutated by main.js from saved editor value.
 export const FACTION_ICON_CFG = { size: 28 };
+
+// Glow config — populated by configureGlow() called from main.js after loading layout.json
+let _glowConfig = { highlight: 0xffd700, buff: 0x22ee66, damage: 0xff3333, inset: 0, width: 1 };
+export function configureGlow(colors, inset, width) {
+  const hex = s => parseInt((s || '').replace('#', ''), 16);
+  _glowConfig = {
+    highlight: hex(colors?.highlight) || 0xffd700,
+    buff:      hex(colors?.buff)      || 0x22ee66,
+    damage:    hex(colors?.damage)    || 0xff3333,
+    inset:     (inset ?? 0) / 2,   // editor scale → game scale
+    width:     width ?? 1,
+  };
+}
 
 const cardTexture       = PIXI.Texture.from(cardSrc);
 const fieldFrameTexture = PIXI.Texture.from(fieldFrameSrc);
@@ -265,21 +278,9 @@ export class CardView extends PIXI.Container {
     g.endFill();
   }
 
-  // Load per-event glow colours + ring inset + width from the editor (saved in localStorage)
+  // Return per-event glow colours + ring inset + width from the file-based config
   static _loadGlowColors() {
-    try {
-      const c = JSON.parse(localStorage.getItem('card-glow-colors') || 'null') ?? {};
-      const hex = s => parseInt((s || '').replace('#', ''), 16);
-      // Inset stored at editor scale (256×384); PIXI works at half that (128×192)
-      const inset = parseFloat(localStorage.getItem('card-glow-inset') || '0') / 2 || 0;
-      const width = parseFloat(localStorage.getItem('card-glow-width') || '1') || 1;
-      return {
-        highlight: hex(c.highlight) || 0xffd700,
-        buff:      hex(c.buff)      || 0x22ee66,
-        damage:    hex(c.damage)    || 0xff3333,
-        inset, width,
-      };
-    } catch { return { highlight: 0xffd700, buff: 0x22ee66, damage: 0xff3333, inset: 0, width: 1 }; }
+    return { ..._glowConfig };
   }
 
   // Shared glow ring painter — adapts to hand (rounded rect) vs field (circle)

@@ -37,14 +37,10 @@ export class Card {
     this.deathVfxPreset  = extras.deathVfxPreset  ?? null; // VFX preset name string | null
   }
 
-  /** Load the card collection — uses the bundled collection.json (baked at build/dev time).
-   *  Falls back to localStorage, then random test cards as last resort. */
+  /** Load the card collection — uses the bundled collection.json (baked at build/dev time). */
   static loadFromStorage(n = 15) {
     try {
-      // Primary: statically bundled collection (always current in dev thanks to Vite HMR)
-      const raw = (_bundledCollection.length > 0)
-        ? _bundledCollection
-        : JSON.parse(localStorage.getItem('card-editor-collection') || '[]');
+      const raw = _bundledCollection.length > 0 ? _bundledCollection : [];
       if (raw.length === 0) return Card.createTestCards(n);
       // Build a deck of exactly 2 copies of every card in the collection, then shuffle
       const deck = [...raw, ...raw].sort(() => Math.random() - 0.5);
@@ -56,19 +52,10 @@ export class Card {
   }
 
   /**
-   * Kept for backwards-compat — syncs localStorage from the served JSON.
-   * No longer critical because loadFromStorage uses the bundled import.
+   * No-op kept for backwards-compat.
+   * Collection is now loaded via the static bundle import; no localStorage needed.
    */
-  static async syncFromFile() {
-    try {
-      const res  = await fetch('/CreatedCards/collection.json?t=' + Date.now());
-      if (!res.ok) return;
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        localStorage.setItem('card-editor-collection', JSON.stringify(data));
-      }
-    } catch { /* ignore */ }
-  }
+  static async syncFromFile() {}
 
   /**
    * Returns the damage multiplier when a card of `attackerFaction` attacks

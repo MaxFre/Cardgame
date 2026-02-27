@@ -3,35 +3,38 @@ import { init }  from './ui/BoardUI.js';
 import { Card }  from './game/Card.js';
 import { ATTACK_OFFSET, HEALTH_OFFSET, FIELD_ATTACK_OFFSET, FIELD_HEALTH_OFFSET,
          NAME_OFFSET, MANA_OFFSET, FACTION_OFFSET, FIELD_FACTION_OFFSET,
-         FIELD_CIRCLE, HAND_ART_BOX, FACTION_ICON_CFG } from './game/CardView.js';
+         FIELD_CIRCLE, HAND_ART_BOX, FACTION_ICON_CFG, configureGlow } from './game/CardView.js';
 import { Stars }  from './game/Stars.js';
 import { Leaves } from './game/Leaves.js';
 import { Fire }   from './game/Fire.js';
 import { SoundManager } from './game/SoundManager.js';
+import { configureSequences } from './game/AnimationSequencer.js';
+import { configureHand } from './game/Hand.js';
 import spaceSrc   from './assets/backgrounds/Space/BoardSpace.png';
 import forrestSrc from './assets/backgrounds/Forrest/BoardForrest.png';
 
-// Apply stat positions and field-circle — loaded from layout.json file, fall back to localStorage
+// Module-level layout data — populated from layout.json on startup
+let _layoutData = null;
+
+// Fetch layout.json and configure all sub-systems from its data
 async function syncLayoutFromFile() {
   try {
     const res = await fetch('/CreatedCards/layout.json?t=' + Date.now());
     if (!res.ok) return;
-    const data = await res.json();
-    // Mirror to localStorage so the game always uses the latest saved values
-    if (data.statLayout)         localStorage.setItem('card-stat-layout',               JSON.stringify(data.statLayout));
-    if (data.fieldCircle)        localStorage.setItem('card-field-circle',              JSON.stringify(data.fieldCircle));
-    if (data.handArtBox)         localStorage.setItem('card-hand-art-box',              JSON.stringify(data.handArtBox));
-    if (data.handSlots)          localStorage.setItem('hand-slot-positions',            JSON.stringify(data.handSlots));
-    if (data.opponentHandSlots)  localStorage.setItem('hand-slot-positions-opponent',   JSON.stringify(data.opponentHandSlots));
-    if (data.handLayoutConfig)   localStorage.setItem('hand-layout-config',             JSON.stringify(data.handLayoutConfig));
-    if (data.animCardPlay)        localStorage.setItem('anim-sequence-cardplay',          JSON.stringify(data.animCardPlay));
-    if (data.animCombat)          localStorage.setItem('anim-sequence-combat',            JSON.stringify(data.animCombat));
-  } catch { /* file missing — localStorage fallback is used below */ }
+    _layoutData = await res.json();
+    // Configure animation sequences
+    configureSequences(_layoutData.animCardPlay, _layoutData.animCombat);
+    // Configure hand layout (spacing, slot positions)
+    configureHand(_layoutData.handLayoutConfig, _layoutData.handSlots, _layoutData.opponentHandSlots);
+    // Configure card glow colours and ring dimensions
+    configureGlow(_layoutData.glowColors, _layoutData.glowInset, _layoutData.glowWidth);
+  } catch { /* file missing — sub-systems use defaults */ }
 }
 
 function applyStatLayout() {
+  const data = _layoutData ?? {};
   try {
-    const saved = JSON.parse(localStorage.getItem('card-stat-layout') || 'null');
+    const saved = data.statLayout ?? null;
     if (saved) {
       const toOffset = (pos, def) => ({
         x: pos ? pos.x / 2 - 64 : def.x,
@@ -51,7 +54,7 @@ function applyStatLayout() {
     }
   } catch { /* use defaults */ }
   try {
-    const circ = JSON.parse(localStorage.getItem('card-field-circle') || 'null');
+    const circ = data.fieldCircle ?? null;
     if (circ) {
       FIELD_CIRCLE.cx = circ.cx / 2 - 64;
       FIELD_CIRCLE.cy = circ.cy / 2 - 96;
@@ -59,7 +62,7 @@ function applyStatLayout() {
     }
   } catch { /* use defaults */ }
   try {
-    const box = JSON.parse(localStorage.getItem('card-hand-art-box') || 'null');
+    const box = data.handArtBox ?? null;
     if (box) {
       HAND_ART_BOX.x = box.x / 2;
       HAND_ART_BOX.y = box.y / 2;

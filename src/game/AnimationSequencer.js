@@ -1,8 +1,8 @@
 /**
- * AnimationSequencer — reads the timeline config saved by animation-editor
+ * AnimationSequencer — reads the timeline config set by main.js (after fetching layout.json)
  * and executes animation phases in the configured order.
  *
- * Config format (stored in localStorage):
+ * Config format:
  *   [ { id: 'summon_vfx', slot: 0 }, { id: 'battlecry_burst', slot: 1 }, ... ]
  *
  * Phases with identical slot numbers run in parallel.
@@ -37,16 +37,19 @@ export const DEFAULT_COMBAT_CONFIG = [
   { id: 'death_vfx', slot: 3 },
 ];
 
-export const STORAGE_KEYS = {
-  cardPlay: 'anim-sequence-cardplay',
-  combat:   'anim-sequence-combat',
-};
+// Module-level configs — set by main.js after loading layout.json
+let _cardPlayConfig = null;
+let _combatConfig   = null;
 
-function loadConfig(storageKey, defaultConfig) {
-  try {
-    const saved = JSON.parse(localStorage.getItem(storageKey));
-    if (Array.isArray(saved) && saved.length > 0) return saved;
-  } catch { /* ignore */ }
+/** Called from main.js once layout.json has been fetched. */
+export function configureSequences(cardPlay, combat) {
+  if (Array.isArray(cardPlay) && cardPlay.length > 0) _cardPlayConfig = cardPlay;
+  if (Array.isArray(combat)   && combat.length   > 0) _combatConfig   = combat;
+}
+
+function loadConfig(isCardPlay, defaultConfig) {
+  const cfg = isCardPlay ? _cardPlayConfig : _combatConfig;
+  if (cfg) return cfg.map(x => ({ ...x }));
   return defaultConfig.map(x => ({ ...x }));
 }
 
@@ -55,8 +58,8 @@ function loadConfig(storageKey, defaultConfig) {
  * phaseMap: { [id: string]: () => Promise<void> }
  * Each function should resolve when its animation is done.
  */
-async function runSequence(storageKey, defaultConfig, phaseMap) {
-  const config = loadConfig(storageKey, defaultConfig);
+async function runSequence(isCardPlay, defaultConfig, phaseMap) {
+  const config = loadConfig(isCardPlay, defaultConfig);
 
   // Group phase ids by slot number
   const groups = new Map();
@@ -80,10 +83,10 @@ async function runSequence(storageKey, defaultConfig, phaseMap) {
 
 export const AnimationSequencer = {
   runCardPlay: (phaseMap) =>
-    runSequence(STORAGE_KEYS.cardPlay, DEFAULT_CARD_PLAY_CONFIG, phaseMap),
+    runSequence(true,  DEFAULT_CARD_PLAY_CONFIG, phaseMap),
   runCombat: (phaseMap) =>
-    runSequence(STORAGE_KEYS.combat, DEFAULT_COMBAT_CONFIG, phaseMap),
+    runSequence(false, DEFAULT_COMBAT_CONFIG, phaseMap),
 
-  getCardPlayConfig:  () => loadConfig(STORAGE_KEYS.cardPlay, DEFAULT_CARD_PLAY_CONFIG),
-  getCombatConfig:    () => loadConfig(STORAGE_KEYS.combat,   DEFAULT_COMBAT_CONFIG),
+  getCardPlayConfig:  () => loadConfig(true,  DEFAULT_CARD_PLAY_CONFIG),
+  getCombatConfig:    () => loadConfig(false, DEFAULT_COMBAT_CONFIG),
 };

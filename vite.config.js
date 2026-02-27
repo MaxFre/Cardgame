@@ -8,11 +8,13 @@ const CREATED_CARDS_DIR  = resolve(__dirname, 'src/assets/cards/CreatedCards');
 const COLLECTION_FILE    = path.join(CREATED_CARDS_DIR, 'collection.json');
 const LAYOUT_FILE        = path.join(CREATED_CARDS_DIR, 'layout.json');
 const VFX_PRESETS_FILE   = path.join(CREATED_CARDS_DIR, 'vfx-presets.json');
+const SOUNDS_FILE        = path.join(CREATED_CARDS_DIR, 'sounds.json');
 // Mirror to public/ so `vite build` bundles the latest data
 const PUBLIC_CARDS_DIR   = resolve(__dirname, 'public/CreatedCards');
 const PUBLIC_COLLECTION  = path.join(PUBLIC_CARDS_DIR, 'collection.json');
 const PUBLIC_LAYOUT      = path.join(PUBLIC_CARDS_DIR, 'layout.json');
 const PUBLIC_VFX_PRESETS = path.join(PUBLIC_CARDS_DIR, 'vfx-presets.json');
+const PUBLIC_SOUNDS      = path.join(PUBLIC_CARDS_DIR, 'sounds.json');
 
 function writeWithPublicMirror(srcFile, publicFile, body) {
   fs.writeFileSync(srcFile, body, 'utf-8');
@@ -76,6 +78,25 @@ function cardStoragePlugin() {
             JSON.parse(body);
             fs.mkdirSync(CREATED_CARDS_DIR, { recursive: true });
             writeWithPublicMirror(VFX_PRESETS_FILE, PUBLIC_VFX_PRESETS, body);
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ ok: true }));
+          } catch (e) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ ok: false, error: String(e) }));
+          }
+        });
+      });
+
+      // POST /api/save-sounds — saves sound data URLs + volumes to sounds.json
+      server.middlewares.use('/api/save-sounds', (req, res) => {
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
+        let body = '';
+        req.on('data', chunk => (body += chunk));
+        req.on('end', () => {
+          try {
+            JSON.parse(body);
+            fs.mkdirSync(CREATED_CARDS_DIR, { recursive: true });
+            writeWithPublicMirror(SOUNDS_FILE, PUBLIC_SOUNDS, body);
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ ok: true }));
           } catch (e) {

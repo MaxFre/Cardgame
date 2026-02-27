@@ -2,18 +2,16 @@ import * as PIXI from 'pixi.js';
 import cardBackSrc from '../assets/cards/CardBack.png';
 import forrestSrc  from '../assets/backgrounds/Forrest/BoardForrest.png';
 
-// ── Storage ───────────────────────────────────────────────────────────────────
-const PLAYER_KEY   = 'hand-slot-positions';
-const OPPONENT_KEY = 'hand-slot-positions-opponent';
-
-function getKey(mode) { return mode === 'opponent' ? OPPONENT_KEY : PLAYER_KEY; }
+// ── Storage (in-memory, populated from file on startup) ─────────────────────
+let _playerSlots   = {};
+let _opponentSlots = {};
 
 function loadAll(mode) {
-  try { return JSON.parse(localStorage.getItem(getKey(mode)) || '{}'); }
-  catch { return {}; }
+  return mode === 'opponent' ? _opponentSlots : _playerSlots;
 }
 function saveAll(data, mode) {
-  localStorage.setItem(getKey(mode), JSON.stringify(data));
+  if (mode === 'opponent') _opponentSlots = data;
+  else                     _playerSlots   = data;
 }
 
 // ── PIXI app — fixed 1280×720 (same coordinate space as the game) ────────────
@@ -102,9 +100,9 @@ function autoLayout(n) {
 }
 
 // ── File persistence ─────────────────────────────────────────────────────────
+let _handLayoutConfig = null;
+
 async function saveHandLayoutToFile() {
-  let handLayoutConfig;
-  try { handLayoutConfig = JSON.parse(localStorage.getItem('hand-layout-config') || 'null'); } catch { /* ignore */ }
   try {
     await fetch('/api/save-hand-layout', {
       method:  'POST',
@@ -112,21 +110,21 @@ async function saveHandLayoutToFile() {
       body:    JSON.stringify({
         handSlots:         loadAll('player'),
         opponentHandSlots: loadAll('opponent'),
-        ...(handLayoutConfig ? { handLayoutConfig } : {}),
+        ...(_handLayoutConfig ? { handLayoutConfig: _handLayoutConfig } : {}),
       }),
     });
-  } catch { /* dev server not reachable — localStorage is still updated */ }
+  } catch { /* dev server not reachable */ }
 }
 
-// On startup: seed localStorage from the saved file so VS Code layout carries over.
+// On startup: seed slot positions from the saved file
 ;(async function syncHandLayoutFromFile() {
   try {
     const res = await fetch('/CreatedCards/layout.json?t=' + Date.now());
     if (!res.ok) return;
     const data = await res.json();
-    // File wins — overwrite localStorage so we see the same layout as in VS Code
-    if (data.handSlots)         localStorage.setItem(PLAYER_KEY,   JSON.stringify(data.handSlots));
-    if (data.opponentHandSlots) localStorage.setItem(OPPONENT_KEY, JSON.stringify(data.opponentHandSlots));
+    if (data.handSlots)         _playerSlots   = data.handSlots;
+    if (data.opponentHandSlots) _opponentSlots = data.opponentHandSlots;
+    if (data.handLayoutConfig)  _handLayoutConfig = data.handLayoutConfig;
     rebuild();
   } catch { /* server not available */ }
 })();
