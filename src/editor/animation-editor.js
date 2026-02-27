@@ -1,7 +1,6 @@
 import {
   CARD_PLAY_PHASES, COMBAT_PHASES,
   DEFAULT_CARD_PLAY_CONFIG, DEFAULT_COMBAT_CONFIG,
-  STORAGE_KEYS,
 } from '../game/AnimationSequencer.js';
 
 // ── Sequence definitions ─────────────────────────────────────────────────────
