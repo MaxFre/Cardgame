@@ -36,6 +36,7 @@ let _opponentField   = null;
 let _playerField     = null;
 let _combat          = null;
 let _rations         = null;   // RationsDisplay for the opponent
+let _playerRations   = null;   // RationsDisplay for the player
 let _vfx             = null;   // VFX overlay
 let _opponentMorale  = null;   // MoraleDisplay for the opponent
 let _playerMorale    = null;   // MoraleDisplay for the player
@@ -43,12 +44,13 @@ let _registerBuff    = null;   // callback(result) to track temporary attack cha
 let _drawCard        = null;   // callback() to draw a card into opponent hand
 
 export const OpponentAI = {
-  init({ hand, field, playerField, combat, rations, vfx, opponentMorale, playerMorale, registerBuff, drawCard }) {
+  init({ hand, field, playerField, combat, rations, playerRations, vfx, opponentMorale, playerMorale, registerBuff, drawCard }) {
     _opponentHand   = hand;
     _opponentField  = field;
     _playerField    = playerField;
     _combat         = combat;
     _rations        = rations        ?? null;
+    _playerRations  = playerRations  ?? null;
     _vfx            = vfx            ?? null;
     _opponentMorale = opponentMorale ?? null;
     _playerMorale   = playerMorale   ?? null;
@@ -148,6 +150,12 @@ export const OpponentAI = {
         return eff.value;                     // draining enemy morale = full face value
       case 'gain_ration_this_turn':
         return eff.value;                     // extra rations = very good
+      case 'battlecry_drain_ration_pool':
+        return eff.value;                     // draining enemy pool = full face value
+      case 'spell_drain_ration_pool':
+        return eff.value;
+      case 'spell_gain_ration_pool':
+        return Math.ceil(eff.value / 2);      // gaining pool = moderate value
       case 'spell_gain_morale':
         return Math.ceil(eff.value / 2);
       case 'spell_drain_morale':
@@ -213,16 +221,31 @@ export const OpponentAI = {
       const isSpell = card.card?.type === 'spell';
       // Spells don't occupy field slots
       if (!isSpell && minionCount >= slotsAvailable) continue;
-      // Target-requiring spells (buff/debuff/destroy) need valid targets
-      if (isSpell) {
-        const effId   = card.card?.onPlayEffect?.id;
-        const effMeta = effId && EFFECTS_BY_ID[effId];
-        if (effMeta?.requiresTarget) {
-          const friendlyCount = _opponentField._placed.length + minionCount;
-          const enemyCount    = _playerField._placed.length;
-          // Positive buffs need a friendly target; debuffs/destroy need an enemy target
-          if (effMeta.isPositive !== false && friendlyCount === 0) continue;
-          if (effMeta.isPositive === false  && enemyCount    === 0) continue;
+
+      // Validate battlecry / on-play effect has valid targets before playing
+      const effId   = card.card?.onPlayEffect?.id;
+      const effMeta = effId ? EFFECTS_BY_ID[effId] : null;
+      if (effMeta) {
+        const friendlyCount = _opponentField._placed.length + minionCount;
+        const enemyCount    = _playerField._placed.length;
+        if (effMeta.requiresTarget) {
+          // targetAny needs at least one minion on either side (excluding self)
+          if (effMeta.targetAny) {
+            if (friendlyCount + enemyCount === 0) continue;
+          } else if (effMeta.isPositive !== false) {
+            if (friendlyCount === 0) continue;   // buff needs a friendly
+          } else {
+            if (enemyCount === 0) continue;       // debuff/destroy needs an enemy
+          }
+        }
+        // Random-damage battlecries need a live enemy
+        if ((effId === 'deal_damage_random_enemy' || effId === 'battlecry_drain_ration_pool') && enemyCount === 0) continue;
+        // Heal battlecry needs a damaged friendly
+        if (effId === 'heal_random_friendly') {
+          const hasDamaged = _opponentField._placed.some(p =>
+            p.cardView.card.health > 0 && p.cardView.card.health < p.cardView._maxHealth
+          );
+          if (!hasDamaged) continue;
         }
       }
       const cost = card.card?.manaCost ?? 0;
@@ -308,7 +331,7 @@ export const OpponentAI = {
               _opponentField, _playerField, _combat,
               _opponentMorale, _playerMorale, _rations,
               targetCard, _vfx, cardView,
-              { drawCard: _drawCard }
+              { drawCard: _drawCard, targetRations: _playerRations }
             );
             if (result?.cardView && _registerBuff) _registerBuff(result);
           }

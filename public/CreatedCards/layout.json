@@ -22,11 +22,11 @@
         "y": 55
       },
       "rationIcon": {
-        "x": 45,
-        "y": 49
+        "x": 44,
+        "y": 51
       },
       "factionIconSize": 95,
-      "rationIconSize": 120
+      "rationIconSize": 73
     },
     "field": {
       "attack": {
@@ -78,8 +78,8 @@
         "y": 62
       },
       "rationIcon": {
-        "x": 48,
-        "y": 36
+        "x": 34,
+        "y": 34
       },
       "factionIconSize": 56,
       "rationIconSize": 93

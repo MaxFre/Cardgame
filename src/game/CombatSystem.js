@@ -9,6 +9,9 @@ import { SoundManager } from './SoundManager.js';
 function easeOutQuad(t) { return 1 - (1 - t) * (1 - t); }
 function easeInQuad(t)  { return t * t; }
 
+// A card can attack only if it has attack > 0
+function _canAttack(cardView) { return (cardView.card?.attack ?? 0) > 0; }
+
 export class CombatSystem {
   constructor(app, playerField, opponentField) {
     this._app           = app;
@@ -57,9 +60,9 @@ export class CombatSystem {
       if (!CardPreview.isDragging && !this._targeting) CardPreview.show(cardView);
     });
     cardView.on('pointerout', () => CardPreview.hide());
-    if (summoningSick) {
-      // Card cannot attack the turn it is played
-      this._exhausted.add(cardView);
+    if (summoningSick || !_canAttack(cardView)) {
+      // Card cannot attack the turn it is played, or ever (attack = 0)
+      if (summoningSick) this._exhausted.add(cardView);
       cardView._sprite.tint = 0x888888;
       cardView.cursor = 'default';
     } else {
@@ -85,8 +88,8 @@ export class CombatSystem {
       if (!CardPreview.isDragging && !this._targeting) CardPreview.show(cardView);
     });
     cardView.on('pointerout', () => CardPreview.hide());
-    if (summoningSick) {
-      this._exhausted.add(cardView);
+    if (summoningSick || !_canAttack(cardView)) {
+      if (summoningSick) this._exhausted.add(cardView);
       cardView._sprite.tint = 0x888888;
       cardView.cursor = 'default';
     } else {
@@ -305,8 +308,14 @@ export class CombatSystem {
     this._queue.length = 0; // discard any queued actions on turn change
     clearPendingPlays();
     for (const card of this._exhausted) {
-      card._sprite.tint = 0xffffff;
-      card.cursor = 'crosshair';
+      // Restore only if the card can actually attack on its next active turn
+      if (_canAttack(card)) {
+        card._sprite.tint = 0xffffff;
+        card.cursor = 'crosshair';
+      } else {
+        card._sprite.tint = 0x888888;
+        card.cursor = 'default';
+      }
     }
     this._exhausted.clear();
     this._applyTurnTint();
@@ -318,13 +327,15 @@ export class CombatSystem {
     const inactiveTint = 0x888888;
     for (const { cardView } of this._playerField._placed) {
       if (this._exhausted.has(cardView)) continue; // keep exhausted tint
-      cardView._sprite.tint = this._isPlayerTurn ? activeTint : inactiveTint;
-      cardView.cursor       = this._isPlayerTurn ? 'crosshair' : 'default';
+      const active = this._isPlayerTurn && _canAttack(cardView);
+      cardView._sprite.tint = active ? activeTint : inactiveTint;
+      cardView.cursor       = active ? 'crosshair' : 'default';
     }
     for (const { cardView } of this._opponentField._placed) {
       if (this._exhausted.has(cardView)) continue;
-      cardView._sprite.tint = this._isPlayerTurn ? inactiveTint : activeTint;
-      cardView.cursor       = this._isPlayerTurn ? 'default' : 'crosshair';
+      const active = !this._isPlayerTurn && _canAttack(cardView);
+      cardView._sprite.tint = active ? activeTint : inactiveTint;
+      cardView.cursor       = active ? 'crosshair' : 'default';
     }
   }
 

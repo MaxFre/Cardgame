@@ -116,6 +116,24 @@ export const EFFECT_REGISTRY = [
     defaultValue: 1,
   },
   {
+    id:           'battlecry_drain_ration_pool',
+    label:        'Battlecry: Remove X rations from opponent pool',
+    hasValue:     true,
+    defaultValue: 3,
+  },
+  {
+    id:           'spell_drain_ration_pool',
+    label:        'Spell: Drain X rations from opponent pool',
+    hasValue:     true,
+    defaultValue: 3,
+  },
+  {
+    id:           'spell_gain_ration_pool',
+    label:        'Spell: Add X rations to your pool',
+    hasValue:     true,
+    defaultValue: 3,
+  },
+  {
     id:           'destroy_a_minion',
     label:        'Battlecry: Destroy any minion',
     hasValue:     false,
@@ -254,6 +272,18 @@ export async function applyOnPlay(effectId, value, sourceField, targetField, com
     case 'spell_draw_a_card':
       if (vfx && sourceMorale) vfx.burstAt(..._displayPos(sourceMorale), 0x88ddff, 10).catch(() => {});
       if (callbacks.drawCard) for (let i = 0; i < value; i++) callbacks.drawCard();
+      return;
+    case 'battlecry_drain_ration_pool':
+      if (vfx && targetMorale) vfx.burstAt(..._displayPos(targetMorale), 0xff8800, 12).catch(() => {});
+      if (callbacks.targetRations) callbacks.targetRations.drainPool(value);
+      return;
+    case 'spell_drain_ration_pool':
+      if (vfx && targetMorale) vfx.burstAt(..._displayPos(targetMorale), 0xff8800, 14).catch(() => {});
+      if (callbacks.targetRations) callbacks.targetRations.drainPool(value);
+      return;
+    case 'spell_gain_ration_pool':
+      if (vfx && sourceMorale) vfx.burstAt(..._displayPos(sourceMorale), 0x88ffbb, 14).catch(() => {});
+      if (sourceRations) sourceRations.gainPool(value);
       return;
     case 'destroy_a_minion':
     case 'spell_destroy_a_minion':

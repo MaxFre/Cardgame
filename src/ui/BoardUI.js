@@ -84,23 +84,23 @@ export function init(app) {
   // ── Morale displays — centred horizontally, near top and bottom edges ────
   const opponentMorale = new MoraleDisplay(false);
   opponentMorale.x = screen.width / 2;
-  opponentMorale.y = 66;
+  opponentMorale.y = 100;
   stage.addChild(opponentMorale);
 
   const playerMorale = new MoraleDisplay(true);
   playerMorale.x = screen.width / 2;
-  playerMorale.y = screen.height - 22;
+  playerMorale.y = screen.height - 30;
   stage.addChild(playerMorale);
 
   // ── Rations displays — above their respective morale counters ──────────
   const opponentRations = new RationsDisplay();
   opponentRations.x = screen.width / 2;
-  opponentRations.y = 22;
+  opponentRations.y = 32;
   stage.addChild(opponentRations);
 
   const playerRations = new RationsDisplay();
   playerRations.x = screen.width / 2;
-  playerRations.y = screen.height - 66;
+  playerRations.y = screen.height - 100;
   stage.addChild(playerRations);
   setRationsRef(playerRations);  // wire rations cost enforcement into drag-drop
 
@@ -110,7 +110,7 @@ export function init(app) {
   const _turnBuffs = new Map();
 
   // Spell cast callback — fires the card's on-play effect when player casts a spell
-  const _playerDrawCb = { drawCard: () => { drawCardToHand(playerDeck, hand); playerDeckView.setCount(playerDeck.length); } };
+  const _playerDrawCb = { drawCard: () => { drawCardToHand(playerDeck, hand); playerDeckView.setCount(playerDeck.length); }, targetRations: opponentRations };
   setSpellCallback(async cv => {
     const eff = cv.card.onPlayEffect;
     if (!eff?.id) return;
@@ -269,7 +269,7 @@ export function init(app) {
           if (pool.length > 0) chosenTarget = pool[Math.floor(Math.random() * pool.length)];
         }
         if (!meta?.requiresTarget || chosenTarget) {
-          await applyOnPlay(eff.id, eff.value ?? 1, opponentField, playerField, combat, opponentMorale, playerMorale, opponentRations, chosenTarget, vfx, cardView, { drawCard: () => { drawCardToOpponentHand(opponentDeck); opponentDeckView.setCount(opponentDeck.length); } });
+          await applyOnPlay(eff.id, eff.value ?? 1, opponentField, playerField, combat, opponentMorale, playerMorale, opponentRations, chosenTarget, vfx, cardView, { drawCard: () => { drawCardToOpponentHand(opponentDeck); opponentDeckView.setCount(opponentDeck.length); }, targetRations: playerRations });
         }
       },
     });
@@ -340,6 +340,7 @@ export function init(app) {
     playerField:    playerField,
     combat,
     rations:        opponentRations,
+    playerRations:  playerRations,
     vfx,
     opponentMorale,
     playerMorale,
@@ -526,13 +527,13 @@ export function init(app) {
     hand.x          = app.screen.width  * 0.30;
     hand.y          = app.screen.height * 0.88;
     opponentRations.x = app.screen.width / 2;
-    opponentRations.y = 22;
+    opponentRations.y = 32;
     opponentMorale.x  = app.screen.width / 2;
-    opponentMorale.y  = 66;
+    opponentMorale.y  = 100;
     playerRations.x   = app.screen.width / 2;
-    playerRations.y   = app.screen.height - 66;
+    playerRations.y   = app.screen.height - 100;
     playerMorale.x    = app.screen.width / 2;
-    playerMorale.y    = app.screen.height - 22;
+    playerMorale.y    = app.screen.height - 30;
     positionBtnAndDecks();
   });
 
@@ -572,12 +573,14 @@ export function init(app) {
     origEndTurn();
     if (combat._isPlayerTurn) {
       // Player's turn just started — draw a card and increment rations
-      playerRations.nextTurn();
+      const playerMoraleCost = playerRations.nextTurn();
+      if (playerMoraleCost > 0) playerMorale.takeDamageMulti(playerMoraleCost, true);
       drawCardToHand(playerDeck, hand);
       playerDeckView.setCount(playerDeck.length);
     } else {
       // Opponent's turn just started — draw a card, increment rations, run AI
-      opponentRations.nextTurn();
+      const opponentMoraleCost = opponentRations.nextTurn();
+      if (opponentMoraleCost > 0) opponentMorale.takeDamageMulti(opponentMoraleCost, true);
       drawCardToOpponentHand(opponentDeck);
       opponentDeckView.setCount(opponentDeck.length);
       OpponentAI.onOpponentTurnStart();
