@@ -213,11 +213,17 @@ export const OpponentAI = {
       const isSpell = card.card?.type === 'spell';
       // Spells don't occupy field slots
       if (!isSpell && minionCount >= slotsAvailable) continue;
-      // Target-requiring spells (buff/debuff) need at least one friendly minion on field
+      // Target-requiring spells (buff/debuff/destroy) need valid targets
       if (isSpell) {
-        const effId = card.card?.onPlayEffect?.id;
-        const needsTarget = effId && EFFECTS_BY_ID[effId]?.requiresTarget;
-        if (needsTarget && _opponentField._placed.length === 0 && minionCount === 0) continue;
+        const effId   = card.card?.onPlayEffect?.id;
+        const effMeta = effId && EFFECTS_BY_ID[effId];
+        if (effMeta?.requiresTarget) {
+          const friendlyCount = _opponentField._placed.length + minionCount;
+          const enemyCount    = _playerField._placed.length;
+          // Positive buffs need a friendly target; debuffs/destroy need an enemy target
+          if (effMeta.isPositive !== false && friendlyCount === 0) continue;
+          if (effMeta.isPositive === false  && enemyCount    === 0) continue;
+        }
       }
       const cost = card.card?.manaCost ?? 0;
       if (cost > rationsBudget) continue;   // can't afford — skip
