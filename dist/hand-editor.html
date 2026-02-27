@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hand Layout Editor</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #111; overflow: hidden; font-family: sans-serif; color: #fff; }
+    #toolbar {
+      position: fixed; top: 0; left: 0; right: 0; height: 52px;
+      background: rgba(0,0,0,0.85); border-bottom: 1px solid #333;
+      display: flex; align-items: center; gap: 12px; padding: 0 16px; z-index: 10;
+    }
+    #toolbar label { font-size: 13px; color: #aaa; }
+    #sizeSelect {
+      background: #222; color: #fff; border: 1px solid #555;
+      border-radius: 4px; padding: 4px 8px; font-size: 14px; cursor: pointer;
+    }
+    .btn {
+      padding: 6px 14px; border-radius: 4px; border: none; cursor: pointer;
+      font-size: 13px; font-weight: bold;
+    }
+    .btn-save  { background: #16a34a; color: #fff; }
+    .btn-save:hover  { background: #15803d; }
+    .btn-reset { background: #dc2626; color: #fff; }
+    .btn-reset:hover { background: #b91c1c; }
+    .btn-back  { background: #374151; color: #fff; }
+    .btn-back:hover  { background: #4b5563; }
+    #hint {
+      position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.6); color: #ccc; padding: 4px 12px;
+      border-radius: 10px; font-size: 12px; pointer-events: none;
+    }
+    #savedBadge {
+      color: #4ade80; font-size: 13px; opacity: 0;
+      transition: opacity 0.4s;
+    }
+    canvas { display: block; }
+  </style>
+  <script type="module" crossorigin src="./assets/handEditor-3cd9e729.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/modulepreload-polyfill-3cfb730f.js">
+  <link rel="modulepreload" crossorigin href="./assets/BoardForrest-927fe922.js">
+  <link rel="modulepreload" crossorigin href="./assets/CardBack-419d7a67.js">
+</head>
+<body>
+  <div id="toolbar">
+    <a class="btn btn-back" href="/">← Game</a>
+    <label>Hand size:</label>
+    <select id="sizeSelect">
+      <option value="1">1 card</option>
+      <option value="2">2 cards</option>
+      <option value="3">3 cards</option>
+      <option value="4">4 cards</option>
+      <option value="5" selected>5 cards</option>
+      <option value="6">6 cards</option>
+      <option value="7">7 cards</option>
+      <option value="8">8 cards</option>
+      <option value="9">9 cards</option>
+      <option value="10">10 cards</option>
+    </select>
+    <div style="display:flex; gap:0; border:1px solid #555; border-radius:4px; overflow:hidden;">
+      <button id="btnPlayer"   style="padding:5px 14px; background:#4f6ef7; color:#fff; border:none; cursor:pointer; font-size:13px; font-weight:bold;">Player</button>
+      <button id="btnOpponent" style="padding:5px 14px; background:#222; color:#aaa; border:none; cursor:pointer; font-size:13px;">Opponent</button>
+    </div>
+    <button class="btn btn-save"  id="btnSave">Save</button>
+    <button class="btn btn-reset" id="btnReset">Reset to auto</button>
+    <span id="savedBadge">✓ Saved</span>
+    <span style="margin-left:auto; font-size:12px; color:#666;">
+      Drag cards • Scroll wheel = rotate • Shift+scroll = fine rotate
+    </span>
+  </div>
+  <div id="app"></div>
+  <div id="hint">Origin marker = hand anchor point in-game</div>
+  
+</body>
+</html>

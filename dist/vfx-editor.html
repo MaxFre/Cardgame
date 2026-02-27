@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VFX Editor</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #0d0d14; overflow: hidden; font-family: 'Segoe UI', sans-serif; color: #ddd; }
+
+    /* ── Top toolbar ───────────────────────────────────────────────────────── */
+    #toolbar {
+      position: fixed; top: 0; left: 0; right: 0; height: 48px;
+      background: rgba(5,5,15,0.95); border-bottom: 1px solid #2a2a4a;
+      display: flex; align-items: center; gap: 10px; padding: 0 14px; z-index: 100;
+    }
+    #toolbar a, #toolbar button { padding: 5px 13px; border-radius: 5px; font-size: 13px; cursor: pointer; border: none; }
+    .btn-back  { background: #2a2a3e; color: #aaa; text-decoration: none; }
+    .btn-back:hover { background: #3a3a5e; color: #fff; }
+    .btn-green { background: #16a34a; color: #fff; }
+    .btn-green:hover { background: #15803d; }
+    .btn-red   { background: #dc2626; color: #fff; }
+    .btn-red:hover { background: #b91c1c; }
+    .btn-blue  { background: #2563eb; color: #fff; }
+    .btn-blue:hover { background: #1d4ed8; }
+    #presetName { background: #1a1a2e; border: 1px solid #3a3a5e; color: #fff; padding: 4px 10px; border-radius: 5px; font-size: 14px; width: 180px; }
+    #savedBadge { color: #4ade80; font-size: 12px; opacity: 0; transition: opacity 0.4s; }
+    .sep { width: 1px; height: 28px; background: #2a2a4a; margin: 0 4px; }
+
+    /* ── Main layout ────────────────────────────────────────────────────────── */
+    #main {
+      position: fixed; top: 48px; left: 0; right: 0; bottom: 0;
+      display: flex;
+    }
+
+    /* ── Left panel: presets + steps ────────────────────────────────────────── */
+    #leftPanel {
+      width: 240px; flex-shrink: 0;
+      background: rgba(8,8,20,0.96); border-right: 1px solid #1e1e3a;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .panel-section { border-bottom: 1px solid #1e1e3a; }
+    .panel-title {
+      padding: 8px 12px; font-size: 11px; font-weight: 700;
+      color: #5a6aaa; text-transform: uppercase; letter-spacing: 1px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .panel-title button {
+      background: #2a2a4a; border: none; color: #aaa; padding: 2px 8px;
+      border-radius: 4px; font-size: 11px; cursor: pointer;
+    }
+    .panel-title button:hover { background: #3a3a6a; color: #fff; }
+    #presetList { overflow-y: auto; max-height: 160px; }
+
+    /* collapsible section bodies */
+    .section-body { overflow: hidden; transition: max-height 0.22s ease; }
+    .section-body.collapsed { max-height: 0 !important; }
+    .panel-title.collapsible { cursor: pointer; user-select: none; }
+    .panel-title.collapsible:hover { background: rgba(255,255,255,0.03); }
+    .chevron { font-size: 10px; color: #5a6aaa; transition: transform 0.2s; display: inline-block; margin-left: 4px; }
+    .panel-title.collapsible.collapsed .chevron { transform: rotate(-90deg); }
+    .preset-item {
+      padding: 7px 14px; cursor: pointer; font-size: 13px; color: #aaa;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .preset-item:hover { background: #16163a; color: #fff; }
+    .preset-item.active { background: #1e1e4a; color: #88aaff; font-weight: 600; }
+    .preset-item .del-btn {
+      background: none; border: none; color: #555; cursor: pointer; font-size: 14px; padding: 0 4px;
+    }
+    .preset-item .del-btn:hover { color: #ef4444; }
+
+    #stepList { overflow-y: auto; flex: 1; min-height: 80px; }
+    .step-item {
+      padding: 7px 10px 7px 14px; cursor: pointer; font-size: 12px;
+      display: flex; align-items: center; gap: 6px; color: #bbb;
+      border-bottom: 1px solid #12122a;
+    }
+    .step-item:hover { background: #16163a; }
+    .step-item.active { background: #1e2248; color: #88ccff; }
+    .step-type-pill {
+      font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px;
+      text-transform: uppercase;
+    }
+    .step-item .step-controls { margin-left: auto; display: flex; gap: 2px; }
+    .step-item .step-controls button {
+      background: none; border: none; color: #555; cursor: pointer; font-size: 12px; padding: 1px 4px;
+    }
+    .step-item .step-controls button:hover { color: #aaa; }
+
+    .step-add-row { padding: 8px 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .step-add-row button {
+      font-size: 11px; padding: 4px 8px; border-radius: 4px; border: none;
+      cursor: pointer; font-weight: 600;
+    }
+
+    /* ── Canvas area ─────────────────────────────────────────────────────────── */
+    #canvasArea {
+      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      position: relative; background: #0a0a18;
+    }
+    #canvasWrap { position: relative; }
+    #app canvas { display: block; }
+    #playBtn {
+      position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      color: #fff; border: none; padding: 10px 36px; font-size: 16px; font-weight: 700;
+      border-radius: 24px; cursor: pointer; letter-spacing: 1px;
+      box-shadow: 0 4px 20px rgba(100,60,240,0.5);
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+    #playBtn:hover { transform: translateX(-50%) scale(1.06); box-shadow: 0 6px 28px rgba(100,60,240,0.7); }
+    #playBtn:active { transform: translateX(-50%) scale(0.97); }
+    #loopLabel { position: absolute; bottom: 18px; right: 20px; font-size: 12px; color: #666; display: flex; align-items: center; gap: 6px; }
+
+    /* ── Right panel: inspector ──────────────────────────────────────────────── */
+    #inspector {
+      width: 280px; flex-shrink: 0;
+      background: rgba(8,8,20,0.96); border-left: 1px solid #1e1e3a;
+      overflow-y: auto; padding-bottom: 20px;
+    }
+    #inspectorTitle {
+      padding: 10px 14px 8px; font-size: 11px; font-weight: 700;
+      color: #5a6aaa; text-transform: uppercase; letter-spacing: 1px;
+      border-bottom: 1px solid #1e1e3a;
+    }
+    .field { padding: 10px 14px 4px; }
+    .field label { display: block; font-size: 11px; color: #6a7aaa; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .field input[type=range] { width: 100%; accent-color: #6366f1; }
+    .field .range-row { display: flex; align-items: center; gap: 8px; }
+    .field .range-row input[type=range] { flex: 1; }
+    .field .range-val { font-size: 13px; color: #aaa; min-width: 38px; text-align: right; }
+    .field input[type=text], .field input[type=number] {
+      width: 100%; background: #12122e; border: 1px solid #2a2a4a; color: #ddd;
+      padding: 5px 8px; border-radius: 5px; font-size: 13px;
+    }
+    .field input[type=color] { width: 100%; height: 32px; border: none; border-radius: 5px; cursor: pointer; background: none; }
+    .field select {
+      width: 100%; background: #12122e; border: 1px solid #2a2a4a; color: #ddd;
+      padding: 5px 8px; border-radius: 5px; font-size: 13px;
+    }
+    #noStep { padding: 24px 18px; color: #4a5a7a; font-size: 13px; line-height: 1.7; }
+  </style>
+  <script type="module" crossorigin src="./assets/vfxEditor-d49c3de3.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/modulepreload-polyfill-3cfb730f.js">
+  <link rel="modulepreload" crossorigin href="./assets/BoardForrest-927fe922.js">
+  <link rel="modulepreload" crossorigin href="./assets/SoundManager-7983c1fd.js">
+  <link rel="modulepreload" crossorigin href="./assets/VFX-c64be62e.js">
+  <link rel="modulepreload" crossorigin href="./assets/OnFieldFrame-3e1ae940.js">
+</head>
+<body>
+  <div id="toolbar">
+    <a class="btn-back" href="/">← Game</a>
+    <div class="sep"></div>
+    <span style="font-size:13px;color:#6a7aaa;">Preset:</span>
+    <input id="presetName" type="text" placeholder="Effect name…" />
+    <button class="btn-green" id="btnNew">+ New</button>
+    <button class="btn-blue" id="btnSave">Save</button>
+    <button class="btn-red" id="btnDeletePreset">Delete</button>
+    <span id="savedBadge">✓ Saved</span>
+  </div>
+
+  <div id="main">
+    <!-- Left: presets + steps -->
+    <div id="leftPanel">
+      <div class="panel-section">
+        <div class="panel-title">
+          <span>Presets</span>
+        </div>
+        <div id="presetList"></div>
+      </div>
+      <!-- Faction default summon VFX -->
+      <div class="panel-section">
+        <div class="panel-title collapsible" onclick="toggleSection(this,'factionBody')">
+          <span>Faction Defaults</span><span class="chevron">▼</span>
+        </div>
+        <div id="factionBody" class="section-body" style="max-height:400px">
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:8px">
+          <div>
+            <label style="font-size:10px;font-weight:700;color:#44cc44;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:1px">Folk</label>
+            <select id="factionFolk" data-faction="Folk" style="width:100%;padding:3px 6px;background:#1a1a2e;color:#ddd;border:1px solid #2a2a4a;border-radius:4px;font-size:12px"></select>
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:700;color:#ff9900;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:1px">Wild</label>
+            <select id="factionWild" data-faction="Wild" style="width:100%;padding:3px 6px;background:#1a1a2e;color:#ddd;border:1px solid #2a2a4a;border-radius:4px;font-size:12px"></select>
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:700;color:#aa66ff;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:1px">Magical</label>
+            <select id="factionMagical" data-faction="Magical" style="width:100%;padding:3px 6px;background:#1a1a2e;color:#ddd;border:1px solid #2a2a4a;border-radius:4px;font-size:12px"></select>
+          </div>
+        </div>
+        </div><!-- end factionBody -->
+      </div>
+      <!-- Special animation overrides -->
+      <div class="panel-section">
+        <div class="panel-title collapsible collapsed" onclick="toggleSection(this,'specialBody')">
+          <span>Special Anims</span><span class="chevron">▼</span>
+        </div>
+        <div id="specialBody" class="section-body collapsed" style="max-height:900px">
+        <div style="max-height:340px;overflow-y:auto;overflow-x:hidden;padding-right:4px">
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:8px">
+          <div>
+            <label style="font-size:10px;font-weight:700;color:#ffd700;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:1px">Battlecry</label>
+            <select id="specialBattlecry" data-special="battlecry" style="width:100%;padding:3px 6px;background:#1a1a2e;color:#ddd;border:1px solid #2a2a4a;border-radius:4px;font-size:12px"></select>
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:700;color:#aa44ff;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:1px">Death (Global Default)</label>
+            <select id="specialDeath" style="width:100%;padding:3px 6px;background:#1a1a2e;color:#ddd;border:1px solid #2a2a4a;border-radius:4px;font-size:12px"></select>
+          </div>
+          <!-- Damage Bolt -->
+          <div style="border-top:1px solid #2a2a4a;padding-top:6px">
+            <label style="font-size:10px;font-weight:700;color:#ff6600;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:1px">Damage Bolt</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:5px">
+              <div>
+                <label style="font-size:9px;color:#888;display:block;margin-bottom:2px">Color</label>
+                <input type="color" id="damageBoltColor" value="#ff6600" style="width:100%;height:22px;border:none;background:none;cursor:pointer;padding:0">
+              </div>
+              <div>
+                <label style="font-size:9px;color:#888;display:block;margin-bottom:2px">Size</label>
+                <input type="number" id="damageBoltSize" min="2" max="30" value="10" style="width:100%;padding:2px 4px;background:#1a1a2e;color:#ddd;border:1px solid #2a2a4a;border-radius:3px;font-size:11px;box-sizing:border-box">
+              </div>
+            </div>
+            <div style="margin-bottom:5px">
+              <label style="font-size:9px;color:#888;display:block;margin-bottom:2px">Speed — <span id="damageBoltSpeedVal">320</span>ms (lower = faster)</label>
+              <input type="range" id="damageBoltSpeed" min="80" max="800" value="320" step="10" style="width:100%;accent-color:#ff6600">
+            </div>
+            <div style="margin-bottom:5px">
+              <label style="font-size:9px;color:#888;display:block;margin-bottom:3px">Sprite PNG (optional)</label>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+                <img id="damageBoltSpriteThumb" style="width:36px;height:36px;object-fit:contain;background:#111;border:1px solid #555;border-radius:3px;display:none">
+                <div id="damageBoltSpriteEmpty" style="width:36px;height:36px;background:#111;border:1px dashed #444;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#555;font-size:18px">+</div>
+                <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0">
+                  <button id="damageBoltSpritePick" style="padding:3px 6px;background:#2a2a4a;color:#aaa;border:1px solid #3a3a6a;border-radius:3px;font-size:10px;cursor:pointer">Choose PNG</button>
+                  <button id="damageBoltSpriteClear" style="padding:3px 6px;background:#3a1a1a;color:#cc8888;border:1px solid #6a2a2a;border-radius:3px;font-size:10px;cursor:pointer">Clear</button>
+                </div>
+              </div>
+              <label style="font-size:9px;color:#888;display:block;margin-bottom:2px">Scale — <span id="damageBoltSpriteScaleVal">1.0</span>x</label>
+              <input type="range" id="damageBoltSpriteScale" min="0.1" max="5" value="1" step="0.1" style="width:100%;accent-color:#ff6600">
+            </div>
+            <button onclick="previewBolt('damageBolt')" style="width:100%;margin-bottom:5px;padding:4px 0;background:#7c3a0a;color:#ffd0a0;border:1px solid #ff6600;border-radius:4px;font-size:11px;cursor:pointer">▶ Preview Bolt</button>
+            <div>
+              <label style="font-size:9px;color:#888;display:block;margin-bottom:3px">Impact Preset</label>
+              <select id="specialDamageBolt" style="width:100%;padding:3px 6px;background:#1a1a2e;color:#ddd;border:1px solid #2a2a4a;border-radius:4px;font-size:12px"></select>
+            </div>
+          </div>
+          <!-- Morale Bolt -->
+          <div style="border-top:1px solid #2a2a4a;padding-top:6px">
+            <label style="font-size:10px;font-weight:700;color:#ff2222;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:1px">Morale Bolt</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:5px">
+              <div>
+                <label style="font-size:9px;color:#888;display:block;margin-bottom:2px">Color</label>
+                <input type="color" id="moraleBoltColor" value="#cc1111" style="width:100%;height:22px;border:none;background:none;cursor:pointer;padding:0">
+              </div>
+              <div>
+                <label style="font-size:9px;color:#888;display:block;margin-bottom:2px">Size</label>
+                <input type="number" id="moraleBoltSize" min="2" max="30" value="7" style="width:100%;padding:2px 4px;background:#1a1a2e;color:#ddd;border:1px solid #2a2a4a;border-radius:3px;font-size:11px;box-sizing:border-box">
+              </div>
+            </div>
+            <div style="margin-bottom:5px">
+              <label style="font-size:9px;color:#888;display:block;margin-bottom:2px">Speed — <span id="moraleBoltSpeedVal">380</span>ms (lower = faster)</label>
+              <input type="range" id="moraleBoltSpeed" min="80" max="800" value="380" step="10" style="width:100%;accent-color:#ff2222">
+            </div>
+            <div style="margin-bottom:5px">
+              <label style="font-size:9px;color:#888;display:block;margin-bottom:3px">Sprite PNG (optional)</label>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+                <img id="moraleBoltSpriteThumb" style="width:36px;height:36px;object-fit:contain;background:#111;border:1px solid #555;border-radius:3px;display:none">
+                <div id="moraleBoltSpriteEmpty" style="width:36px;height:36px;background:#111;border:1px dashed #444;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#555;font-size:18px">+</div>
+                <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0">
+                  <button id="moraleBoltSpritePick" style="padding:3px 6px;background:#2a2a4a;color:#aaa;border:1px solid #3a3a6a;border-radius:3px;font-size:10px;cursor:pointer">Choose PNG</button>
+                  <button id="moraleBoltSpriteClear" style="padding:3px 6px;background:#3a1a1a;color:#cc8888;border:1px solid #6a2a2a;border-radius:3px;font-size:10px;cursor:pointer">Clear</button>
+                </div>
+              </div>
+              <label style="font-size:9px;color:#888;display:block;margin-bottom:2px">Scale — <span id="moraleBoltSpriteScaleVal">1.0</span>x</label>
+              <input type="range" id="moraleBoltSpriteScale" min="0.1" max="5" value="1" step="0.1" style="width:100%;accent-color:#ff2222">
+            </div>
+            <button onclick="previewBolt('moraleBolt')" style="width:100%;margin-bottom:5px;padding:4px 0;background:#570a0a;color:#ffb0b0;border:1px solid #ff2222;border-radius:4px;font-size:11px;cursor:pointer">▶ Preview Bolt</button>
+            <div>
+              <label style="font-size:9px;color:#888;display:block;margin-bottom:3px">Impact Preset</label>
+              <select id="specialMoraleBolt" style="width:100%;padding:3px 6px;background:#1a1a2e;color:#ddd;border:1px solid #2a2a4a;border-radius:4px;font-size:12px"></select>
+            </div>
+          </div>
+        </div>
+        </div><!-- end scrollable wrapper -->
+        </div><!-- end specialBody -->
+      </div>
+      <div class="panel-section" style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+        <div class="panel-title"><span>Steps</span></div>
+        <div id="stepList"></div>
+        <div class="step-add-row" id="stepAddRow">
+          <button onclick="addStep('burst')"     style="background:#7c3aed;color:#fff">Burst</button>
+          <button onclick="addStep('ring')"      style="background:#1d4ed8;color:#fff">Ring</button>
+          <button onclick="addStep('shake')"     style="background:#dc2626;color:#fff">Shake</button>
+          <button onclick="addStep('text')"      style="background:#d97706;color:#fff">Text</button>
+          <button onclick="addStep('rise')"      style="background:#16a34a;color:#fff">Rise</button>
+          <button onclick="addStep('flash')"     style="background:#0891b2;color:#fff">Flash</button>
+          <button onclick="addStep('fire')"      style="background:#e85d04;color:#fff">Fire</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Center: PIXI canvas -->
+    <div id="canvasArea">
+      <div id="canvasWrap">
+        <div id="app"></div>
+        <button id="playBtn">▶ Play</button>
+        <label id="loopLabel"><input type="checkbox" id="loopCheck" /> Loop</label>
+      </div>
+    </div>
+
+    <!-- Right: inspector -->
+    <div id="inspector">
+      <div id="inspectorTitle">Step Properties</div>
+      <div id="inspectorBody">
+        <div id="noStep">Select a step on the left to edit its properties, or add a new step using the buttons below the list.</div>
+      </div>
+    </div>
+  </div>
+
+  
+  <script>
+    function toggleSection(titleEl, bodyId) {
+      const body = document.getElementById(bodyId);
+      const isCollapsed = body.classList.toggle('collapsed');
+      titleEl.classList.toggle('collapsed', isCollapsed);
+    }
+  </script>
+</body>
+</html>

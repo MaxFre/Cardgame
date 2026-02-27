@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Animation Timeline</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d0f1a;
+      /* placeholder — full styles below */
+      color: #e2d9c4;
+      font-family: 'Georgia', serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* ── Header ── */
+    header {
+      background: #13152a;
+      border-bottom: 1px solid #2a2d4a;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-shrink: 0;
+    }
+    header h1 {
+      font-size: 17px;
+      color: #f0a500;
+      letter-spacing: 1px;
+      white-space: nowrap;
+    }
+
+    .tabs { display: flex; gap: 6px; }
+    .tab {
+      padding: 5px 14px;
+      background: #1e2036;
+      border: 1px solid #3a3d5a;
+      border-radius: 6px;
+      color: #888;
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tab.active { background: #f0a500; border-color: #f0a500; color: #000; font-weight: bold; }
+    .tab:not(.active):hover { background: #252740; color: #ccc; }
+
+    .save-btn {
+      margin-left: auto;
+      padding: 5px 18px;
+      background: #1a3d2b;
+      border: 1px solid #3a8a4a;
+      border-radius: 6px;
+      color: #88e0a0;
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .save-btn:hover { background: #25503a; }
+
+    .back-link {
+      color: #666;
+      font-size: 12px;
+      text-decoration: none;
+    }
+    .back-link:hover { color: #aaa; }
+
+    /* ── Stage ── */
+    #stage {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 28px;
+      padding: 20px 30px;
+      overflow: hidden;
+    }
+
+    /* ── Timeline ── */
+    #timeline-outer {
+      position: relative;
+      width: 100%;
+      max-width: 880px;
+      height: 200px;
+      flex-shrink: 0;
+    }
+
+    /* the main horizontal line */
+    #timeline-track {
+      position: absolute;
+      left: 0; right: 0;
+      top: 96px;
+      height: 3px;
+      background: linear-gradient(to right, #2a2d4a 0%, #4a4d6a 30%, #4a4d6a 70%, #2a2d4a 100%);
+      border-radius: 2px;
+    }
+
+    /* arrowhead at the right end */
+    #timeline-track::after {
+      content: '';
+      position: absolute;
+      right: -8px;
+      top: -5px;
+      border-top: 6px solid transparent;
+      border-bottom: 6px solid transparent;
+      border-left: 12px solid #4a4d6a;
+    }
+
+    /* "FIRST" / "LAST" end labels */
+    .end-label {
+      position: absolute;
+      top: 108px;
+      font-size: 10px;
+      letter-spacing: 1px;
+      font-style: italic;
+    }
+    #lbl-first { left: 0; color: #4a9eff88; }
+    #lbl-last  { right: 8px; color: #ff6b6b88; }
+
+    /* slot tick marks */
+    .slot-tick {
+      position: absolute;
+      top: 88px;
+      width: 1px;
+      height: 18px;
+      background: #2e3150;
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+
+    /* phase dot */
+    .phase-dot {
+      position: absolute;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.25);
+      cursor: grab;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      transform: translate(-50%, -50%);
+      transition: box-shadow 0.12s, border-color 0.12s;
+      z-index: 10;
+      line-height: 1;
+    }
+    .phase-dot:hover { border-color: rgba(255,255,255,0.6); }
+    .phase-dot.dragging {
+      cursor: grabbing;
+      z-index: 100;
+      border-color: rgba(255,255,255,0.9);
+    }
+
+    /* slot-number badge on the dot */
+    .dot-badge {
+      position: absolute;
+      bottom: -2px;
+      right: -2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #0d0f1a;
+      border: 1px solid #555;
+      font-size: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #aaa;
+      pointer-events: none;
+    }
+
+    /* label below dot */
+    .phase-label {
+      position: absolute;
+      transform: translateX(-50%);
+      text-align: center;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    .phase-label .lbl-name {
+      font-size: 11px;
+      font-weight: bold;
+    }
+
+    /* parallel bracket — vertical line connecting stacked dots */
+    .par-bracket {
+      position: absolute;
+      width: 2px;
+      background: rgba(255,255,255,0.12);
+      pointer-events: none;
+      transform: translateX(-50%);
+      border-radius: 1px;
+    }
+
+    /* ── Legend cards ── */
+    #legend {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 880px;
+      width: 100%;
+    }
+    .legend-card {
+      background: #13152a;
+      border: 1px solid #22254a;
+      border-radius: 8px;
+      padding: 9px 13px;
+      min-width: 130px;
+      flex: 1 1 130px;
+      max-width: 175px;
+    }
+    .legend-card-head {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    .legend-card-desc {
+      font-size: 10px;
+      color: #666;
+      line-height: 1.4;
+    }
+    .legend-card-slot {
+      font-size: 10px;
+      color: #555;
+      margin-top: 5px;
+    }
+
+    /* ── Hint ── */
+    #hint {
+      font-size: 11px;
+      color: #3a3d5a;
+      text-align: center;
+    }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #1a3d2b;
+      border: 1px solid #3a8a4a;
+      border-radius: 8px;
+      padding: 9px 18px;
+      color: #88e0a0;
+      font-size: 13px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    #toast.show { opacity: 1; }
+
+    /* ── Two-column layout ── */
+    body { display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+    #main { flex:1; display:flex; overflow:hidden; }
+
+    /* Left panel */
+    #left-panel {
+      flex: 1; min-width: 0;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 14px; padding: 18px 22px; overflow-y: auto;
+    }
+    /* remove the old #stage */
+    #stage { display:contents; }
+
+    /* Right panel */
+    #right-panel {
+      width: 316px; flex-shrink: 0;
+      border-left: 1px solid #191c2e;
+      background: #080a14;
+      display: flex; flex-direction: column;
+      align-items: center;
+      padding: 14px 12px 12px;
+      gap: 10px;
+    }
+    #preview-head {
+      width: 100%; display: flex; align-items: center;
+      justify-content: space-between;
+    }
+    #preview-head span { font-size: 13px; color: #f0a500; letter-spacing: 1px; }
+    #play-btn {
+      padding: 4px 18px; background: #1e2a4a;
+      border: 1px solid #4a6aaa; border-radius: 6px;
+      color: #88aaee; font-family: inherit; font-size: 13px;
+      cursor: pointer; transition: background 0.15s;
+    }
+    #play-btn:hover:not(:disabled) { background: #263660; }
+    #play-btn:disabled { opacity: 0.4; cursor: default; }
+    #preview-canvas {
+      border-radius: 10px;
+      border: 1px solid #1a1d2e;
+      background: #060810;
+    }
+
+    /* Phase log */
+    #phase-log {
+      width: 100%; flex: 1;
+      display: flex; flex-direction: column;
+      gap: 3px; overflow-y: auto;
+    }
+    .log-row {
+      display: flex; align-items: center; gap: 7px;
+      padding: 4px 7px; border-radius: 6px;
+      border: 1px solid transparent; font-size: 12px;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .log-row.pending { color: #383a52; }
+    .log-row.playing { background: #12162a; border-color: var(--pc); color: #ddd; font-weight: bold; }
+    .log-row.done    { color: #4a4d60; }
+    .log-icon  { font-size: 15px; width: 20px; text-align: center; }
+    .log-name  { flex: 1; }
+    .log-status{ font-size: 12px; }
+    .log-slot  { font-size: 9px; color: #2a2d40; }
+
+    /* Dot pulse when playing */
+    .phase-dot.playing {
+      border-color: #fff !important;
+      animation: dotpulse 0.55s ease-in-out infinite alternate;
+    }
+    @keyframes dotpulse {
+      from { box-shadow: 0 0 6px 2px var(--dc, #fff); }
+      to   { box-shadow: 0 0 20px 7px var(--dc, #fff); }
+    }
+  </style>
+  <script type="module" crossorigin src="./assets/animEditor-e965d40e.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/modulepreload-polyfill-3cfb730f.js">
+  <link rel="modulepreload" crossorigin href="./assets/AnimationSequencer-d646b041.js">
+</head>
+<body>
+  <header>
+    <h1>⏱ Animation Timeline</h1>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-seq="cardPlay">Card Play</button>
+      <button class="tab" data-seq="combat">Combat</button>
+    </div>
+    <button class="save-btn" id="save-btn">💾 Save</button>
+    <a class="back-link" href="/">← Game</a>
+  </header>
+
+  <div id="main">
+    <!-- Left: timeline + legend -->
+    <div id="left-panel">
+      <div id="timeline-outer">
+        <div id="timeline-track"></div>
+        <div class="end-label" id="lbl-first">FIRST</div>
+        <div class="end-label" id="lbl-last">LAST</div>
+      </div>
+      <div id="hint">Drag dots left / right to reorder &nbsp;·&nbsp; Dots at the same position run in parallel</div>
+      <div id="legend"></div>
+    </div>
+
+    <!-- Right: preview -->
+    <div id="right-panel">
+      <div id="preview-head">
+        <span>Preview</span>
+        <button id="play-btn">▶ Play</button>
+      </div>
+      <canvas id="preview-canvas" width="292" height="258"></canvas>
+      <div id="phase-log"></div>
+    </div>
+  </div>
+
+  <div id="toast">Saved!</div>
+
+  
+</body>
+</html>

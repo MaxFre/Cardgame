@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sound Editor</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg:      #0f1117;
+      --surface: #1a1d27;
+      --surface2:#22263a;
+      --border:  #2e3250;
+      --text:    #e2e8f0;
+      --muted:   #6b7280;
+      --radius:  10px;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    header h1 { font-size: 18px; font-weight: 700; }
+    header .sub { color: var(--muted); font-size: 13px; }
+    .back-btn {
+      margin-left: auto;
+      padding: 7px 16px;
+      background: #1e2238;
+      color: #aab4d0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      text-decoration: none;
+    }
+    .back-btn:hover { background: #2a3050; color: var(--text); }
+
+    .toolbar {
+      padding: 12px 28px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      font-size: 13px;
+    }
+    .toolbar label { color: var(--muted); }
+    .toolbar input[type=range] { width: 130px; accent-color: #4f6ef7; cursor: pointer; }
+    .toolbar .vol-val { color: var(--text); min-width: 32px; }
+    .toolbar button {
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 12px;
+      background: #1e2238;
+      color: #aab4d0;
+    }
+    .toolbar button:hover { background: #2a3050; color: #e2e8f0; }
+
+    main {
+      flex: 1;
+      padding: 24px 28px;
+      overflow-y: auto;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 18px;
+    }
+
+    .slot-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      border-left: 4px solid var(--accent, #4f6ef7);
+      transition: box-shadow 0.15s;
+    }
+    .slot-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+
+    .slot-header {
+      padding: 12px 14px 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .slot-icon {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+    .slot-name { font-weight: 700; font-size: 14px; }
+    .slot-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    .drop-zone {
+      margin: 0 14px 10px;
+      border: 2px dashed var(--border);
+      border-radius: 7px;
+      padding: 14px 10px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      position: relative;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: #4f6ef7;
+      background: rgba(79,110,247,0.06);
+      color: var(--text);
+    }
+    .drop-zone.has-file {
+      border-style: solid;
+      border-color: rgba(79,110,247,0.4);
+    }
+    .drop-zone input[type=file] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+    .drop-icon { font-size: 22px; margin-bottom: 4px; }
+    .file-info { font-size: 11px; color: #88aaff; margin-top: 4px; }
+
+    .waveform-wrap {
+      padding: 0 14px 6px;
+    }
+    canvas.waveform {
+      width: 100%;
+      height: 44px;
+      border-radius: 5px;
+      background: #11131e;
+      display: block;
+    }
+
+    .controls {
+      padding: 8px 14px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .controls button {
+      padding: 5px 11px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .btn-test {
+      background: #1e2238;
+      color: #aab4d0;
+    }
+    .btn-test:hover { background: #263060; color: #e2e8f0; }
+    .btn-clear {
+      background: #2a1515;
+      color: #cc6666;
+      border-color: #4a2020;
+    }
+    .btn-clear:hover { background: #3a2020; color: #ff8888; }
+    .vol-label { margin-left: auto; font-size: 11px; color: var(--muted); }
+    .controls input[type=range] {
+      width: 80px;
+      accent-color: #4f6ef7;
+      cursor: pointer;
+    }
+    .vol-display { font-size: 11px; color: var(--text); min-width: 28px; }
+
+    .status-tag {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-left: auto;
+    }
+    .status-builtin {
+      background: rgba(107,114,128,0.2);
+      color: #9ca3af;
+    }
+    .status-custom {
+      background: rgba(79,110,247,0.2);
+      color: #7b9cff;
+    }
+  </style>
+  <script type="module" crossorigin src="./assets/soundEditor-6389dcac.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/modulepreload-polyfill-3cfb730f.js">
+  <link rel="modulepreload" crossorigin href="./assets/SoundManager-7983c1fd.js">
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🔊 Sound Editor</h1>
+    <div class="sub">Drag &amp; drop audio files onto each action slot. Supports MP3, OGG, WAV.</div>
+  </div>
+  <a class="back-btn" onclick="history.back()">← Back</a>
+</header>
+
+<div class="toolbar">
+  <label>Master Volume</label>
+  <input type="range" id="masterVol" min="0" max="1" step="0.01" value="1" />
+  <span class="vol-val" id="masterVolVal">100%</span>
+  <button id="muteBtn">🔇 Mute</button>
+  <button id="clearAllBtn" style="margin-left:auto;background:#2a1515;color:#cc6666;border-color:#4a2020">🗑 Clear All Custom</button>
+</div>
+
+<main>
+  <div class="grid" id="grid"></div>
+</main>
+
+
+</body>
+</html>
