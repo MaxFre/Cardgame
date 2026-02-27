@@ -6,6 +6,7 @@ import cardBackSrc     from '../assets/cards/CardBack.png';
 import iconFolkSrc     from '../assets/cards/Icons/FolkIcon.png';
 import iconMagicalSrc  from '../assets/cards/Icons/MagicalIcon.png';
 import iconWildSrc     from '../assets/cards/Icons/WildIcon.png';
+import rationIconSrc   from '../assets/onFieldEffects/RationIcon.png';
 
 export const CARD_W = 128;
 export const CARD_H = 192;
@@ -17,14 +18,20 @@ export let NAME_OFFSET         = { x:   0, y: -81 };
 export let MANA_OFFSET         = { x: -50, y: -83 };
 export let FACTION_OFFSET      = { x:   0, y: -65 };
 
+// Ration icon badge (sits behind the mana number) — mutated by main.js from layout.json
+export let RATION_ICON_OFFSET       = { x: -50, y: -83 };
+export const RATION_ICON_CFG        = { size: 36 };
+
 // Stat label offsets specifically for spell cards in hand view.
 // Independent from minion offsets so the editor can position them separately.
-export let SPELL_NAME_OFFSET   = { x:   0, y: -81 };
-export let SPELL_MANA_OFFSET   = { x: -50, y: -83 };
+export let SPELL_NAME_OFFSET        = { x:   0, y: -81 };
+export let SPELL_MANA_OFFSET        = { x: -50, y: -83 };
+export let SPELL_RATION_ICON_OFFSET = { x: -50, y: -83 };
 // Stat label offsets from card centre — field view (defaults same, overridden by editor layout)
-export let FIELD_ATTACK_OFFSET  = { x: -15, y: 46 };
-export let FIELD_HEALTH_OFFSET  = { x:  14, y: 46 };
-export let FIELD_FACTION_OFFSET = { x:   0, y: -65 };
+export let FIELD_ATTACK_OFFSET      = { x: -15, y: 46 };
+export let FIELD_HEALTH_OFFSET      = { x:  14, y: 46 };
+export let FIELD_FACTION_OFFSET     = { x:   0, y: -65 };
+export let FIELD_RATION_ICON_OFFSET = { x: -50, y: -83 };
 
 // Art window in game-scale coords (relative to top-left of card)
 // Mutable so main.js can apply the saved hand-art-box from the editor
@@ -185,6 +192,21 @@ export class CardView extends PIXI.Container {
     this._nameLabel.y      = _isSpell ? SPELL_NAME_OFFSET.y : NAME_OFFSET.y;
     this._nameLabel.zIndex = 2;
     this.addChild(this._nameLabel);
+
+    // Ration icon badge — sits behind the mana number
+    const _rationTex = PIXI.Texture.from(rationIconSrc);
+    this._rationIcon = new PIXI.Sprite(_rationTex);
+    this._rationIcon.anchor.set(0.5);
+    const applyRationSize = () => {
+      this._rationIcon.width  = RATION_ICON_CFG.size;
+      this._rationIcon.height = RATION_ICON_CFG.size;
+    };
+    if (_rationTex.baseTexture.valid) applyRationSize();
+    else _rationTex.baseTexture.once('loaded', applyRationSize);
+    this._rationIcon.x      = _isSpell ? SPELL_RATION_ICON_OFFSET.x : RATION_ICON_OFFSET.x;
+    this._rationIcon.y      = _isSpell ? SPELL_RATION_ICON_OFFSET.y : RATION_ICON_OFFSET.y;
+    this._rationIcon.zIndex = 1;  // behind mana label (zIndex 2)
+    this.addChild(this._rationIcon);
 
     // Mana label
     this._manaLabel = new PIXI.Text(String(this.card.manaCost ?? 0), manaStyle);
@@ -442,6 +464,7 @@ export class CardView extends PIXI.Container {
     // Hide hand-only labels
     if (this._nameLabel)    this._nameLabel.visible    = false;
     if (this._manaLabel)    this._manaLabel.visible    = false;
+    if (this._rationIcon)   this._rationIcon.visible   = false;
 
     // Show faction icon at field-specific position (not for spells)
     if (this._factionIcon) {

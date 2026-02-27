@@ -801,8 +801,17 @@ function redraw() {
     } else {
       RATION_ICON_IMG.onload = () => redraw();
     }
-    // Mana cost number drawn centred on the ration icon
-    drawStat(ctx, String(currentCard.manaCost), RATION_ICON_POS.x, RATION_ICON_POS.y, '#60a5fa');
+    // Mana cost number — independent position, separate drag handle
+    ctx.save();
+    ctx.strokeStyle = '#60a5fa';
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth   = 1.5;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.arc(MANA_POS.x, MANA_POS.y, STAT_HIT_R, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    drawStat(ctx, String(currentCard.manaCost), MANA_POS.x, MANA_POS.y, '#60a5fa');
   }
 
   // 6. Rarity dot – follows the name position (hand only)

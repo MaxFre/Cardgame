@@ -81,27 +81,26 @@ export function init(app) {
   playerField.setVFX(vfx);
   opponentField.setVFX(vfx);
 
-  // ── Morale displays — centred horizontally, near top and bottom edges ────
-  const opponentMorale = new MoraleDisplay(false);
-  opponentMorale.x = screen.width / 2;
-  opponentMorale.y = 100;
-  stage.addChild(opponentMorale);
-
-  const playerMorale = new MoraleDisplay(true);
-  playerMorale.x = screen.width / 2;
-  playerMorale.y = screen.height - 30;
-  stage.addChild(playerMorale);
-
-  // ── Rations displays — above their respective morale counters ──────────
+  // ── Morale + Rations — side-by-side, centred horizontally ──────────
   const opponentRations = new RationsDisplay();
-  opponentRations.x = screen.width / 2;
-  opponentRations.y = 32;
+  opponentRations.x = screen.width / 2 - 78;
+  opponentRations.y = 38;
   stage.addChild(opponentRations);
 
+  const opponentMorale = new MoraleDisplay(false);
+  opponentMorale.x = screen.width / 2 + 78;
+  opponentMorale.y = 38;
+  stage.addChild(opponentMorale);
+
   const playerRations = new RationsDisplay();
-  playerRations.x = screen.width / 2;
-  playerRations.y = screen.height - 100;
+  playerRations.x = screen.width / 2 - 78;
+  playerRations.y = screen.height - 38;
   stage.addChild(playerRations);
+
+  const playerMorale = new MoraleDisplay(true);
+  playerMorale.x = screen.width / 2 + 78;
+  playerMorale.y = screen.height - 38;
+  stage.addChild(playerMorale);
   setRationsRef(playerRations);  // wire rations cost enforcement into drag-drop
 
   // Track temporary attack buffs so we can revert them at end of turn.
@@ -526,14 +525,14 @@ export function init(app) {
     opponentHand.y  = app.screen.height * 0.13;
     hand.x          = app.screen.width  * 0.30;
     hand.y          = app.screen.height * 0.88;
-    opponentRations.x = app.screen.width / 2;
-    opponentRations.y = 32;
-    opponentMorale.x  = app.screen.width / 2;
-    opponentMorale.y  = 100;
-    playerRations.x   = app.screen.width / 2;
-    playerRations.y   = app.screen.height - 100;
-    playerMorale.x    = app.screen.width / 2;
-    playerMorale.y    = app.screen.height - 30;
+    opponentRations.x = app.screen.width / 2 - 78;
+    opponentRations.y = 38;
+    opponentMorale.x  = app.screen.width / 2 + 78;
+    opponentMorale.y  = 38;
+    playerRations.x   = app.screen.width / 2 - 78;
+    playerRations.y   = app.screen.height - 38;
+    playerMorale.x    = app.screen.width / 2 + 78;
+    playerMorale.y    = app.screen.height - 38;
     positionBtnAndDecks();
   });
 

@@ -4,6 +4,7 @@ import { Card }  from './game/Card.js';
 import { ATTACK_OFFSET, HEALTH_OFFSET, FIELD_ATTACK_OFFSET, FIELD_HEALTH_OFFSET,
          NAME_OFFSET, MANA_OFFSET, FACTION_OFFSET, FIELD_FACTION_OFFSET,
          SPELL_NAME_OFFSET, SPELL_MANA_OFFSET,
+         RATION_ICON_OFFSET, RATION_ICON_CFG, SPELL_RATION_ICON_OFFSET, FIELD_RATION_ICON_OFFSET,
          FIELD_CIRCLE, HAND_ART_BOX, SPELL_ART_BOX, FACTION_ICON_CFG, configureGlow } from './game/CardView.js';
 import { Stars }  from './game/Stars.js';
 import { Leaves } from './game/Leaves.js';
@@ -52,12 +53,16 @@ function applyStatLayout() {
       Object.assign(FIELD_HEALTH_OFFSET,  toOffset(field.health,  FIELD_HEALTH_OFFSET));
       Object.assign(FIELD_FACTION_OFFSET, toOffset(field.faction, FIELD_FACTION_OFFSET));
       if (hand.factionIconSize) FACTION_ICON_CFG.size = hand.factionIconSize / 2;
+      if (hand.rationIcon)     Object.assign(RATION_ICON_OFFSET, toOffset(hand.rationIcon, RATION_ICON_OFFSET));
+      if (hand.rationIconSize) RATION_ICON_CFG.size = hand.rationIconSize / 2;
       // Spell card label positions (hand view, saved under the 'spell' key)
       const spell = saved.spell ?? null;
       if (spell) {
-        Object.assign(SPELL_NAME_OFFSET, toOffset(spell.name, SPELL_NAME_OFFSET));
-        Object.assign(SPELL_MANA_OFFSET, toOffset(spell.mana, SPELL_MANA_OFFSET));
+        Object.assign(SPELL_NAME_OFFSET,        toOffset(spell.name,       SPELL_NAME_OFFSET));
+        Object.assign(SPELL_MANA_OFFSET,        toOffset(spell.mana,       SPELL_MANA_OFFSET));
+        if (spell.rationIcon) Object.assign(SPELL_RATION_ICON_OFFSET, toOffset(spell.rationIcon, SPELL_RATION_ICON_OFFSET));
       }
+      if (field.rationIcon) Object.assign(FIELD_RATION_ICON_OFFSET, toOffset(field.rationIcon, FIELD_RATION_ICON_OFFSET));
     }
   } catch { /* use defaults */ }
   try {
