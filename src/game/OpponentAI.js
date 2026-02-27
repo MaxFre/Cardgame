@@ -226,7 +226,12 @@ export const OpponentAI = {
       const effId   = card.card?.onPlayEffect?.id;
       const effMeta = effId ? EFFECTS_BY_ID[effId] : null;
       if (effMeta) {
-        const friendlyCount = _opponentField._placed.length + minionCount;
+        // Spells can only target currently live field minions — not future ones.
+        // Minion battlecries include minionCount because the card itself lands first.
+        const isSpell       = card.card?.type === 'spell';
+        const friendlyCount = isSpell
+          ? _opponentField._placed.length
+          : _opponentField._placed.length + minionCount;
         const enemyCount    = _playerField._placed.length;
         if (effMeta.requiresTarget) {
           // targetAny needs at least one minion on either side (excluding self)

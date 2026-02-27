@@ -517,6 +517,7 @@ export class CardView extends PIXI.Container {
     this._healthLabel.visible  = false;
     if (this._nameLabel)    this._nameLabel.visible    = false;
     if (this._manaLabel)    this._manaLabel.visible    = false;
+    if (this._rationIcon)   this._rationIcon.visible   = false;
     if (this._factionIcon)  this._factionIcon.visible  = false;
     if (this._artContainer) this._artContainer.visible = false;
   }
@@ -553,6 +554,7 @@ export class CardView extends PIXI.Container {
     this._healthLabel.visible  = !isSpell;
     if (this._nameLabel)    this._nameLabel.visible    = true;
     if (this._manaLabel)    this._manaLabel.visible    = true;
+    if (this._rationIcon)   this._rationIcon.visible   = true;
     if (this._factionIcon)  this._factionIcon.visible  = !isSpell;
     if (this._artContainer) this._artContainer.visible = true;
   }
