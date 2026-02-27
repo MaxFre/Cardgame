@@ -364,51 +364,74 @@ export class VFX {
         break;
       }
       case 'fire': {
-        // Flame particles — rising teardrop shapes with yellow→orange→red colour ramp
         const count    = step.count    ?? 40;
         const duration = step.duration ?? 900;
         const height   = step.height   ?? 110;
         const spread   = step.spread   ?? 28;
         const particles = [];
-        // Stagger spawns over the first 60 % of the duration so new flames keep appearing
-        const spawnWindow = duration * 0.6;
-        for (let i = 0; i < count; i++) {
-          const spawnDelay = (i / count) * spawnWindow;
-          const lifespan   = rand(duration * 0.35, duration * 0.8);
-          setTimeout(() => {
-            const g = new PIXI.Graphics();
-            g.x = wx + rand(-spread, spread);
-            g.y = wy + rand(0, 18);
-            const startX = g.x;
-            const startY = g.y;
-            const vx     = rand(-0.45, 0.45);
-            this.container.addChild(g);
-            particles.push(g);
-            const t0 = Date.now();
-            const tick = () => {
-              const p = Math.min(1, (Date.now() - t0) / lifespan);
-              const life = 1 - p;
-              // Colour ramp: white-yellow core → orange mid → dark red tip
-              let r = 255, gv, bv, a;
-              if (p < 0.25)      { gv = Math.round(220 + 35 * (1-p/0.25)); bv = Math.round(80 * (1-p/0.25)); a = life; }
-              else if (p < 0.55) { gv = Math.round(220 * (1-(p-0.25)/0.3)); bv = 0; a = life; }
-              else if (p < 0.78) { r = Math.round(255 - 60*((p-0.55)/0.23)); gv = 0; bv = 0; a = life * 0.85; }
-              else               { r = Math.round(195 - 115*((p-0.78)/0.22)); gv = 0; bv = 0; a = life * 0.5; }
-              const hex = ((r & 0xff) << 16) | ((gv & 0xff) << 8) | (bv & 0xff);
-              const radius = rand(4, 10) * (0.25 + 0.75 * life);
-              g.clear();
-              g.beginFill(hex, Math.max(0, a));
-              g.drawEllipse(0, 0, radius * 0.55, radius); // taller tear-drop
-              g.endFill();
-              g.x = startX + vx * (p * lifespan / 16);
-              g.y = startY - p * height * rand(0.85, 1.15);
-              if (p < 1) requestAnimationFrame(tick);
-              else this._remove(g);
-            };
-            requestAnimationFrame(tick);
-          }, spawnDelay);
-        }
-        await _wait(duration + 80);
+        const _fireNoise = (t, o) =>
+          Math.sin(t * 1.7 + o) * 0.5 + Math.sin(t * 3.1 + o * 0.7) * 0.3 + Math.sin(t * 5.3 + o * 1.3) * 0.2;
+        const _spawnFireLayer = (cfg) => {
+          const spawnWindow = duration * 0.62;
+          for (let i = 0; i < cfg.n; i++) {
+            const spawnDelay = (i / cfg.n) * spawnWindow;
+            const lifespan   = rand(duration * cfg.lifeLo, duration * cfg.lifeHi);
+            setTimeout(() => {
+              const g = new PIXI.Graphics();
+              g.blendMode = PIXI.BLEND_MODES.ADD;
+              g.x = wx + rand(-spread * cfg.spreadMul, spread * cfg.spreadMul);
+              g.y = wy + rand(cfg.spawnYLo, cfg.spawnYHi);
+              const startX = g.x;
+              const startY = g.y;
+              let vx = rand(-cfg.vxRange, cfg.vxRange);
+              const noiseOff = Math.random() * 1000;
+              const radius   = rand(cfg.rLo, cfg.rHi);
+              this.container.addChild(g);
+              particles.push(g);
+              const t0 = Date.now();
+              const tick = () => {
+                const p    = Math.min(1, (Date.now() - t0) / lifespan);
+                const life = 1 - p;
+                vx += (_fireNoise(p * 8 + noiseOff, noiseOff) * cfg.turb);
+                vx  = Math.max(-cfg.vxRange * 2, Math.min(cfg.vxRange * 2, vx));
+                let r, gv, bv, a;
+                if (cfg.type === 'glow') {
+                  r = 255; gv = Math.round(40 + 90 * life); bv = 0; a = life * 0.18;
+                } else if (cfg.type === 'ember') {
+                  const bright = life > 0.5 ? 1 : life * 2;
+                  r = 255; gv = Math.round(120 + 135 * bright); bv = Math.round(180 * bright); a = Math.min(1, life * 2.2);
+                } else {
+                  // core / wisp colour ramp
+                  if (p < 0.22)      { r=255; gv=Math.round(230+25*(1-p/0.22)); bv=Math.round(200*(1-p/0.22)); a=0.85; }
+                  else if (p < 0.45) { r=255; gv=Math.round(230*(1-(p-0.22)/0.23)); bv=0; a=life; }
+                  else if (p < 0.70) { r=255; gv=Math.round(90*(1-(p-0.45)/0.25)); bv=0; a=life; }
+                  else if (p < 0.85) { r=Math.round(255-70*((p-0.70)/0.15)); gv=0; bv=0; a=life*0.85; }
+                  else               { r=Math.round(185-85*((p-0.85)/0.15)); gv=0; bv=0; a=life*0.5; }
+                }
+                const hex = ((r&0xff)<<16)|((gv&0xff)<<8)|(bv&0xff);
+                const rScaled = radius * (cfg.widenBase + (1 - cfg.widenBase) * life);
+                g.clear();
+                g.beginFill(hex, Math.max(0, a));
+                if      (cfg.type === 'glow')  g.drawEllipse(0, 0, rScaled, rScaled * 0.7);
+                else if (cfg.type === 'ember') g.drawCircle(0, 0, rScaled);
+                else                           g.drawEllipse(0, 0, rScaled * 0.52, rScaled);
+                g.endFill();
+                g.alpha = Math.max(0, a);
+                g.x = startX + vx * (p * lifespan / 16);
+                g.y = startY  - p * height * cfg.heightMul * rand(0.88, 1.12);
+                if (p < 1) requestAnimationFrame(tick);
+                else       this._remove(g);
+              };
+              requestAnimationFrame(tick);
+            }, spawnDelay);
+          }
+        };
+        // Layer order: glow → core → wisps → embers
+        _spawnFireLayer({ type:'glow',  n:Math.round(count*0.18), lifeLo:0.55, lifeHi:1.0,  spreadMul:1.4,  spawnYLo:-8,  spawnYHi:10, vyRange:0, vxRange:0.3, rLo:spread*0.9, rHi:spread*1.8, turb:0.04, widenBase:0.7,  heightMul:0.45 });
+        _spawnFireLayer({ type:'core',  n:Math.round(count*1.0),  lifeLo:0.38, lifeHi:0.85, spreadMul:1.0,  spawnYLo:-5,  spawnYHi:8,  vyRange:0, vxRange:0.7, rLo:5,           rHi:14,         turb:0.12, widenBase:0.55, heightMul:1.0  });
+        _spawnFireLayer({ type:'wisp',  n:Math.round(count*0.45), lifeLo:0.25, lifeHi:0.60, spreadMul:0.65, spawnYLo:-20, spawnYHi:-6, vyRange:0, vxRange:1.1, rLo:2,           rHi:7,          turb:0.20, widenBase:0.45, heightMul:0.7  });
+        _spawnFireLayer({ type:'ember', n:Math.round(count*0.30), lifeLo:0.35, lifeHi:1.1,  spreadMul:1.1,  spawnYLo:-4,  spawnYHi:6,  vyRange:0, vxRange:1.8, rLo:1.2,         rHi:3.2,        turb:0.15, widenBase:1.0,  heightMul:1.35 });
+        await _wait(duration + 120);
         for (const p of particles) this._remove(p);
         break;
       }
@@ -814,41 +837,63 @@ export class VFX {
    * Used by aoeBlast to show fire on damaged targets.
    */
   _fireAt(wx, wy, count = 38, height = 100, spread = 22, duration = 820) {
-    const spawnWindow = duration * 0.55;
-    for (let i = 0; i < count; i++) {
-      const spawnDelay = (i / count) * spawnWindow;
-      const lifespan   = rand(duration * 0.35, duration * 0.75);
-      setTimeout(() => {
-        const g = new PIXI.Graphics();
-        g.x = wx + rand(-spread, spread);
-        g.y = wy + rand(0, 16);
-        const startX = g.x;
-        const startY = g.y;
-        const vx     = rand(-0.4, 0.4);
-        this.container.addChild(g);
-        const t0 = Date.now();
-        const tick = () => {
-          const p = Math.min(1, (Date.now() - t0) / lifespan);
-          const life = 1 - p;
-          let r = 255, gv, bv, a;
-          if      (p < 0.25) { gv = Math.round(220 + 35 * (1 - p / 0.25)); bv = Math.round(80 * (1 - p / 0.25)); a = life; }
-          else if (p < 0.55) { gv = Math.round(220 * (1 - (p - 0.25) / 0.30)); bv = 0; a = life; }
-          else if (p < 0.78) { r  = Math.round(255 - 60  * ((p - 0.55) / 0.23)); gv = 0; bv = 0; a = life * 0.85; }
-          else               { r  = Math.round(195 - 115 * ((p - 0.78) / 0.22)); gv = 0; bv = 0; a = life * 0.5;  }
-          const hex    = ((r & 0xff) << 16) | ((gv & 0xff) << 8) | (bv & 0xff);
-          const radius = rand(4, 10) * (0.25 + 0.75 * life);
-          g.clear();
-          g.beginFill(hex, Math.max(0, a));
-          g.drawEllipse(0, 0, radius * 0.55, radius);
-          g.endFill();
-          g.x = startX + vx * (p * lifespan / 16);
-          g.y = startY  - p * height * rand(0.85, 1.15);
-          if (p < 1) requestAnimationFrame(tick);
-          else       this._remove(g);
-        };
-        requestAnimationFrame(tick);
-      }, spawnDelay);
-    }
+    const _noise = (t, o) =>
+      Math.sin(t * 1.7 + o) * 0.5 + Math.sin(t * 3.1 + o * 0.7) * 0.3 + Math.sin(t * 5.3 + o * 1.3) * 0.2;
+    const _layer = (cfg) => {
+      const spawnWindow = duration * 0.55;
+      for (let i = 0; i < cfg.n; i++) {
+        const spawnDelay = (i / cfg.n) * spawnWindow;
+        const lifespan   = rand(duration * cfg.lifeLo, duration * cfg.lifeHi);
+        setTimeout(() => {
+          const g = new PIXI.Graphics();
+          g.blendMode = PIXI.BLEND_MODES.ADD;
+          g.x = wx + rand(-spread * cfg.spreadMul, spread * cfg.spreadMul);
+          g.y = wy + rand(cfg.spawnYLo, cfg.spawnYHi);
+          const startX = g.x, startY = g.y;
+          let vx = rand(-cfg.vxRange, cfg.vxRange);
+          const noiseOff = Math.random() * 1000;
+          const radius   = rand(cfg.rLo, cfg.rHi);
+          this.container.addChild(g);
+          const t0 = Date.now();
+          const tick = () => {
+            const p    = Math.min(1, (Date.now() - t0) / lifespan);
+            const life = 1 - p;
+            vx += _noise(p * 8 + noiseOff, noiseOff) * cfg.turb;
+            vx  = Math.max(-cfg.vxRange * 2, Math.min(cfg.vxRange * 2, vx));
+            let r, gv, bv, a;
+            if (cfg.type === 'glow') {
+              r=255; gv=Math.round(40+90*life); bv=0; a=life*0.18;
+            } else if (cfg.type === 'ember') {
+              const b=life>0.5?1:life*2; r=255; gv=Math.round(120+135*b); bv=Math.round(180*b); a=Math.min(1,life*2.2);
+            } else {
+              if      (p<0.22) { r=255; gv=Math.round(230+25*(1-p/0.22)); bv=Math.round(200*(1-p/0.22)); a=0.85; }
+              else if (p<0.45) { r=255; gv=Math.round(230*(1-(p-0.22)/0.23)); bv=0; a=life; }
+              else if (p<0.70) { r=255; gv=Math.round(90*(1-(p-0.45)/0.25)); bv=0; a=life; }
+              else if (p<0.85) { r=Math.round(255-70*((p-0.70)/0.15)); gv=0; bv=0; a=life*0.85; }
+              else             { r=Math.round(185-85*((p-0.85)/0.15)); gv=0; bv=0; a=life*0.5; }
+            }
+            const hex    = ((r&0xff)<<16)|((gv&0xff)<<8)|(bv&0xff);
+            const rScaled = radius * (cfg.widenBase + (1 - cfg.widenBase) * life);
+            g.clear();
+            g.beginFill(hex, Math.max(0, a));
+            if      (cfg.type === 'glow')  g.drawEllipse(0, 0, rScaled, rScaled * 0.7);
+            else if (cfg.type === 'ember') g.drawCircle(0, 0, rScaled);
+            else                           g.drawEllipse(0, 0, rScaled * 0.52, rScaled);
+            g.endFill();
+            g.alpha = Math.max(0, a);
+            g.x = startX + vx * (p * lifespan / 16);
+            g.y = startY  - p * height * cfg.heightMul * rand(0.88, 1.12);
+            if (p < 1) requestAnimationFrame(tick);
+            else       this._remove(g);
+          };
+          requestAnimationFrame(tick);
+        }, spawnDelay);
+      }
+    };
+    _layer({ type:'glow',  n:Math.round(count*0.2),  lifeLo:0.5, lifeHi:1.0,  spreadMul:1.4,  spawnYLo:-8,  spawnYHi:10, vxRange:0.3, rLo:spread*0.8, rHi:spread*1.6, turb:0.04, widenBase:0.7,  heightMul:0.45 });
+    _layer({ type:'core',  n:count,                   lifeLo:0.38,lifeHi:0.85, spreadMul:1.0,  spawnYLo:-5,  spawnYHi:8,  vxRange:0.7, rLo:4,           rHi:12,         turb:0.12, widenBase:0.55, heightMul:1.0  });
+    _layer({ type:'wisp',  n:Math.round(count*0.4),   lifeLo:0.25,lifeHi:0.55, spreadMul:0.6,  spawnYLo:-18, spawnYHi:-5, vxRange:1.0, rLo:2,           rHi:6,          turb:0.20, widenBase:0.45, heightMul:0.7  });
+    _layer({ type:'ember', n:Math.round(count*0.28),  lifeLo:0.3, lifeHi:1.0,  spreadMul:1.1,  spawnYLo:-4,  spawnYHi:6,  vxRange:1.6, rLo:1.2,         rHi:3.0,        turb:0.15, widenBase:1.0,  heightMul:1.3  });
   }
 
   /**
